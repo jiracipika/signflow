@@ -34,6 +34,8 @@ export default function LivePage() {
   const motionBufRef = useRef<Landmark[][]>([]);
   const [hasSigns, setHasSigns] = useState(false);
 
+  const top3Ref = useRef<[string, number][]>([]);
+  const [top3, setTop3] = useState<[string, number][]>([]);
   const decoderRef = useRef<TemporalDecoder | null>(null);
   const suggester = useMemo(() => buildDefaultSuggester(), []);
   const suggestions = useMemo(
@@ -88,6 +90,14 @@ export default function LivePage() {
       if (!d || !modelReady) return;
       const pred = frame ? predictLandmarks(frame.landmarks) : null;
       const state = d.push(pred, frame?.timestampMs ?? performance.now());
+      if (pred) {
+        top3Ref.current = Object.entries(pred.probabilities)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([l, p]) => [l, p] as [string, number]);
+      } else {
+        top3Ref.current = [];
+      }
 
       if (frame) {
         // collect motion buffer while recording (ref, not state — avoids re-render per frame)
@@ -111,6 +121,7 @@ export default function LivePage() {
         tentativeConfidence: state.tentativeConfidence,
         tracking: state.tracking,
       }));
+      setTop3([...top3Ref.current]);
     },
     [modelReady]
   );
@@ -144,6 +155,31 @@ export default function LivePage() {
   };
 
   const frameCountRef = useRef(0);
+
+  // keyboard shortcuts (desktop): Enter=commit, Space=space, Backspace=delete,
+  // Ctrl/Cmd+Z=undo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editing || (e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const d = decoderRef.current;
+        const letter = d?.commitLetter();
+        if (letter) apply({ type: "letter", letter, source: "manual" });
+      } else if (e.key === " ") {
+        e.preventDefault();
+        apply({ type: "space" });
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        apply({ type: "delete" });
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        apply({ type: "undo" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [apply, editing]);
 
   const commitTentative = () => {
     const d = decoderRef.current;
@@ -316,9 +352,27 @@ export default function LivePage() {
           >
             Commit letter
           </button>
+          {top3.length > 0 && (
+            <div className="btn-row" style={{ marginTop: 6 }}>
+              <span className="small muted" style={{ alignSelf: "center" }}>
+                Also seeing:
+              </span>
+              {top3.slice(1).map(([l, p]) => (
+                <button
+                  key={l}
+                  className="btn"
+                  style={{ minHeight: 40, padding: "6px 12px" }}
+                  onClick={() => apply({ type: "letter", letter: l, source: "manual" })}
+                  aria-label={`Insert letter ${l}`}
+                >
+                  {l} <span className="small muted">{Math.round(p * 100)}%</span>
+                </button>
+              ))}
+            </div>
+          )}
           <p className="small muted" style={{ marginTop: 8 }}>
             For a double letter (like &ldquo;LL&rdquo;), commit, lower your hand briefly,
-            then sign it again.
+            then sign it again. Keyboard: Enter = commit, Space, Backspace, Ctrl/Cmd+Z.
           </p>
         </div>
 
