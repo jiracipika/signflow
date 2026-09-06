@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SignFlow 🤟
 
-## Getting Started
+**Live:** https://signflow-five.vercel.app · **Source:** https://github.com/jiracipika/signflow
 
-First, run the development server:
+An **ASL fingerspelling assistant** that runs entirely in your browser: the camera
+tracks your hand, a trained classifier recognizes static alphabet letters, you
+commit letters into text, and a prefix trie suggests whole words.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+This is **not a full ASL translator** — it recognizes the 24 static letters of
+the ASL alphabet (A–Z except motion-based **J** and **Z**, which have manual
+buttons). No accounts, no uploads: camera frames are processed on-device.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it works
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+    camera frames → MediaPipe HandLandmarker (WASM, on-device)
+                  → 86 engineered features from 21 landmarks
+                  → MLP letter classifier (24 classes)
+                  → temporal decoder (stability window + hold-gate)
+                  → committed transcript → trie word suggestions (up to 3)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Recognition model provenance
 
-## Learn More
+- **Dataset:** [Siruyy/asl-static-landmarks-v1](https://huggingface.co/datasets/Siruyy/asl-static-landmarks-v1)
+  (HuggingFace, **CC-BY-4.0**) — 5,080 samples of MediaPipe hand landmarks,
+  86 features per sample, single collector.
+- **Feature pipeline:** mirrored exactly from
+  [Siruyy/realtime-asl-recognizer](https://github.com/Siruyy/realtime-asl-recognizer) (MIT).
+- **Model:** retrained here as a numpy MLP (86-256-128-64-32-24, Adam) and
+  exported to JSON (`public/models/asl-static-v1.json`); inference is a
+  hand-written TypeScript forward pass — no TF.js or ONNX runtime needed.
+- **Measured accuracy (random 80/20 split, not signer-separated):**
+  **98.93%** overall, 99.19% per-letter average. Top confusions: N↔T, M↔R/S, I↔Y.
+  Verified end-to-end through the exact TS forward pass the browser runs:
+  `node --experimental-strip-types scripts/verify-ts-forward.mjs`.
+- Probabilities are softmax outputs and are **not calibrated accuracy**.
 
-To learn more about Next.js, take a look at the following resources:
+## Development
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+    npm install
+    npm run dev          # http://localhost:3000
+    npm test             # 23 unit tests (decoder, transcript, trie)
+    npx tsc --noEmit     # typecheck
+    npm run build        # production build (also copies MediaPipe assets)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Retraining requires the dataset .npy files (see script header):
 
-## Deploy on Vercel
+    python3 scripts/train_asl.py
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Redeployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The project is linked to Vercel (`.vercel/project.json`):
+
+    vercel          # preview deploy
+    vercel --prod   # production
+
+Note: the "Vercel Authentication" SSO redirect on
+`signflow-jiracipikas-projects.vercel.app` aliases is a team-level default;
+`signflow-five.vercel.app` is the public production alias.
+
+## Limitations (honest)
+
+- J and Z are not recognized (motion-based; manual entry provided).
+- Single-collector training data — different hand shapes may reduce accuracy.
+- Designed for deliberate, paused fingerspelling, not continuous signing.
+- Best in Chrome/Edge (desktop, Android) and Safari 16.4+ (iOS). Camera needs HTTPS.
