@@ -9,6 +9,8 @@ import type { Transcript, TranscriptAction } from "@/lib/types";
 import { buildDefaultSuggester } from "@/lib/dictionary";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
 import { useSettings, addTranscript } from "@/lib/settings";
+import { matchStatic, matchDynamic } from "@/lib/signs/custom-signs";
+import { listSigns } from "@/lib/signs/custom-signs";
 import type { Landmark } from "@/lib/types";
 
 export default function LivePage() {
@@ -26,6 +28,11 @@ export default function LivePage() {
   const [editing, setEditing] = useState(false);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [ttsSupported, setTtsSupported] = useState(false);
+  const [signMatch, setSignMatch] = useState<{ label: string; distance: number } | null>(null);
+  const [recordingMotion, setRecordingMotion] = useState(false);
+  const recordingMotionRef = useRef(false);
+  const motionBufRef = useRef<Landmark[][]>([]);
+  const [hasSigns, setHasSigns] = useState(false);
 
   const decoderRef = useRef<TemporalDecoder | null>(null);
   const suggester = useMemo(() => buildDefaultSuggester(), []);
@@ -55,6 +62,12 @@ export default function LivePage() {
     };
   }, []);
 
+  // do we have any word-signs (static or dynamic) to look for?
+  useEffect(() => {
+    const id = setTimeout(() => setHasSigns(listSigns().length > 0), 0);
+    return () => clearTimeout(id);
+  }, []);
+
   // decoder (re)creation when settings change
   useEffect(() => {
     decoderRef.current = new TemporalDecoder({
@@ -75,6 +88,16 @@ export default function LivePage() {
       if (!d || !modelReady) return;
       const pred = frame ? predictLandmarks(frame.landmarks) : null;
       const state = d.push(pred, frame?.timestampMs ?? performance.now());
+
+      if (frame) {
+        // collect motion buffer while recording (ref, not state — avoids re-render per frame)
+        if (recordingMotionRef.current) motionBufRef.current.push(frame.landmarks);
+        // static word-sign check every 5th frame (cheap nearest-prototype)
+        if (!recordingMotionRef.current && frameCountRef.current++ % 5 === 0) {
+          const m = matchStatic(frame.landmarks);
+          setSignMatch(m ? { label: m.label, distance: m.distance } : null);
+        }
+      }
       // auto-commit pending letters
       const pending = d.drainPending();
       if (pending.length) {
@@ -93,6 +116,34 @@ export default function LivePage() {
   );
 
   const { videoRef, status, error, start, stop, fps } = useHandTracking({ onFrame });
+
+  const commitSign = () => {
+    if (signMatch && signMatch.distance < 0.9) {
+      apply({ type: "manual", text: (transcript.text + " " + signMatch.label).trim() + " " });
+      decoderRef.current?.reset();
+      setSignMatch(null);
+    }
+  };
+
+  const startMotionRecording = () => {
+    motionBufRef.current = [];
+    recordingMotionRef.current = true;
+    setRecordingMotion(true);
+    setSignMatch(null);
+  };
+  const stopMotionRecording = () => {
+    recordingMotionRef.current = false;
+    setRecordingMotion(false);
+    const m = matchDynamic(motionBufRef.current);
+    if (m && m.distance < 0.16) {
+      apply({ type: "manual", text: (transcript.text + " " + m.label).trim() + " " });
+    } else if (m) {
+      setSignMatch({ label: `no match (best ${m.label} ${m.distance.toFixed(2)})`, distance: 1 });
+    }
+    motionBufRef.current = [];
+  };
+
+  const frameCountRef = useRef(0);
 
   const commitTentative = () => {
     const d = decoderRef.current;
@@ -270,6 +321,42 @@ export default function LivePage() {
             then sign it again.
           </p>
         </div>
+
+        {(hasSigns || recordingMotion) && (
+          <div className="card">
+            <h2 style={{ fontSize: 16 }}>Word signs</h2>
+            {recordingMotion ? (
+              <>
+                <p style={{ color: "var(--warn)" }}>● Recording motion…</p>
+                <button className="btn primary" style={{ width: "100%" }} onClick={stopMotionRecording}>
+                  Stop &amp; match
+                </button>
+              </>
+            ) : signMatch && signMatch.distance < 0.9 ? (
+              <>
+                <p style={{ margin: 0 }}>
+                  <strong style={{ fontSize: 24 }}>{signMatch.label}</strong>
+                  <span className="small muted"> · match {signMatch.distance.toFixed(2)} (lower = better, uncalibrated)</span>
+                </p>
+                <button className="btn primary" style={{ width: "100%", marginTop: 8 }} onClick={commitSign}>
+                  Commit &ldquo;{signMatch.label}&rdquo;
+                </button>
+              </>
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>
+                No word sign detected. Hold an I LOVE YOU shape, or record a motion.
+              </p>
+            )}
+            <div className="btn-row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={startMotionRecording} disabled={!running || recordingMotion}>
+                Record motion sign
+              </button>
+            </div>
+            <p className="small muted" style={{ marginBottom: 0 }}>
+              Teach your own in <a href="/teach">Teach</a>.
+            </p>
+          </div>
+        )}
 
         <div className="card">
           <h2 style={{ fontSize: 16 }}>Text</h2>

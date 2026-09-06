@@ -6,9 +6,18 @@ An **ASL fingerspelling assistant** that runs entirely in your browser: the came
 tracks your hand, a trained classifier recognizes static alphabet letters, you
 commit letters into text, and a prefix trie suggests whole words.
 
-This is **not a full ASL translator** — it recognizes the 24 static letters of
-the ASL alphabet (A–Z except motion-based **J** and **Z**, which have manual
-buttons). No accounts, no uploads: camera frames are processed on-device.
+This is **not a full ASL translator**. It supports two recognition modes:
+
+1. **Fingerspelling** — the 24 static letters of the ASL alphabet (A–Z except
+   motion-based **J** and **Z**, which have manual buttons).
+2. **Word/phrase signs** — single-shape signs like **I LOVE YOU** via built-in
+   geometric templates, and **anything you teach it**: open [Teach](/teach),
+   record 5 samples of a static shape or a 2.5-second motion (e.g. THANK YOU,
+   name signs, dynamic gestures), and it becomes locally recognizable
+   (normalized landmarks + nearest-prototype for static, DTW for motions).
+   Taught signs and samples stay in your browser — nothing is uploaded.
+
+No accounts, no uploads: camera frames are processed on-device.
 
 ## How it works
 
@@ -62,4 +71,7 @@ Note: the "Vercel Authentication" SSO redirect on
 - J and Z are not recognized (motion-based; manual entry provided).
 - Single-collector training data — different hand shapes may reduce accuracy.
 - Designed for deliberate, paused fingerspelling, not continuous signing.
+- The built-in I LOVE YOU template is an approximation (no licensed phrase-sign
+  dataset exists); teach-your-own recordings are more accurate.
+- Word-sign distances are uncalibrated template/DTW scores, not probabilities.
 - Best in Chrome/Edge (desktop, Android) and Safari 16.4+ (iOS). Camera needs HTTPS.

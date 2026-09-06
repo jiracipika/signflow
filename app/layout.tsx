@@ -27,6 +27,7 @@ export default function RootLayout({
           </Link>
           <a href="/live">Sign</a>
           <a href="/practice">Practice</a>
+          <a href="/teach">Teach</a>
           <a href="/settings">Settings</a>
         </nav>
         <main className="container">{children}</main>
