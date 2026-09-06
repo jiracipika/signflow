@@ -8,6 +8,7 @@ import { useSettings } from "@/lib/settings";
 import { loadStats, recordRound, resetStats, weakestLetters, type PracticeStats } from "@/lib/practice-stats";
 import type { Landmark } from "@/lib/types";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
+import SignAvatar, { type Pose } from "@/components/SignAvatar";
 
 const STATIC_LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXY".split("");
 const PRACTICE_WORDS = ["HI", "OK", "CAT", "DOG", "YOU", "EAT", "BYE"];
@@ -27,6 +28,7 @@ export default function PracticePage() {
   const [modelReady, setModelReady] = useState(false);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [stats, setStats] = useState<PracticeStats | null>(null);
+  const [refPoses, setRefPoses] = useState<Record<string, Pose[]> | null>(null);
   const [wordIdx, setWordIdx] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -50,6 +52,27 @@ export default function PracticePage() {
     return () => {
       cancelled = true;
       clearTimeout(id);
+    };
+  }, []);
+
+  // reference hand shapes for the animated guide
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/models/asl-poses-v1.json")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`poses ${r.status}`))))
+      .then((d: { poses: Record<string, { lm: number[] }> }) => {
+        if (cancelled) return;
+        const out: Record<string, Pose[]> = {};
+        for (const [k, v] of Object.entries(d.poses)) {
+          out[k] = [];
+          for (let i = 0; i < 21; i++)
+            out[k].push({ x: v.lm[i * 3], y: v.lm[i * 3 + 1], z: v.lm[i * 3 + 2] });
+        }
+        setRefPoses(out);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -341,11 +364,30 @@ export default function PracticePage() {
               </div>
             </div>
           )}
-          <p className="small muted" style={{ marginTop: 14 }}>
-            Note: we deliberately include no sign illustrations. Teaching images
-            require verified ASL accuracy and usage rights we haven&apos;t secured —
-            descriptions here are text-only and feedback comes from your own camera.
-          </p>
+          {refPoses && mode.kind === "letter" && refPoses[mode.target] && (
+            <div style={{ marginTop: 14 }}>
+              <h3 style={{ margin: "6px 0" }}>Target shape — animated reference</h3>
+              <div style={{ maxWidth: 260 }}>
+                <SignAvatar
+                  currentPose={feedback.state === "done" ? null : refPoses[mode.target]}
+                  motion={feedback.state === "done" ? [refPoses[mode.target]] : null}
+                  label={mode.target}
+                  mirrored
+                />
+              </div>
+              <p className="small muted" style={{ marginBottom: 0 }}>
+                The average of many real recordings from the training dataset —
+                an honest reference of how the model learned each letter, not a
+                certified ASL teaching illustration.
+              </p>
+            </div>
+          )}
+          {refPoses && mode.kind === "word" && (
+            <p className="small muted" style={{ marginTop: 14 }}>
+              Word drill: sign each letter in sequence. Letter references appear in
+              single-letter mode.
+            </p>
+          )}
         </section>
       </div>
 

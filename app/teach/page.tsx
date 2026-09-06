@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHandTracking } from "@/lib/camera";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
+import SignAvatar from "@/components/SignAvatar";
 import {
   listSigns,
   deleteSign,
@@ -179,6 +180,10 @@ export default function TeachPage() {
         </section>
 
         <section className="card">
+          <h2 style={{ fontSize: 16 }}>Your hand</h2>
+          <div style={{ maxWidth: 260, marginBottom: 10 }}>
+            <SignAvatar currentPose={landmarks} mirrored label={landmarks ? undefined : "show hand"} />
+          </div>
           <h2>Samples: {samples.length}/{needed}</h2>
           <p className="small muted">
             {kind === "static"

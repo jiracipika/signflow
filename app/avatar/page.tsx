@@ -9,7 +9,7 @@ import SignAvatar, { type Pose } from "@/components/SignAvatar";
 import { spellSequence } from "@/lib/signs/avatar-engine";
 import { loadSigns } from "@/lib/signs/custom-signs";
 
-type PosesFile = { poses: Record<string, number[]> };
+type PosesFile = { poses: Record<string, { lm: number[]; spread: number; samples: number }> };
 
 export default function AvatarPage() {
   const [poses, setPoses] = useState<Record<string, Pose[]> | null>(null);
@@ -17,6 +17,7 @@ export default function AvatarPage() {
   const [text, setText] = useState("");
   const [playing, setPlaying] = useState<"idle" | "letters" | "motion">("idle");
   const [caption, setCaption] = useState("");
+  const [speed, setSpeed] = useState(1); // 0.5 slow .. 1.5 fast
 
   const motionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,7 +31,8 @@ export default function AvatarPage() {
       .then((d) => {
         if (cancelled) return;
         const out: Record<string, Pose[]> = {};
-        for (const [k, flat] of Object.entries(d.poses)) {
+        for (const [k, v] of Object.entries(d.poses)) {
+          const flat = v.lm;
           out[k] = [];
           for (let i = 0; i < 21; i++)
             out[k].push({ x: flat[i * 3], y: flat[i * 3 + 1], z: flat[i * 3 + 2] });
@@ -80,6 +82,7 @@ export default function AvatarPage() {
   const play = () => {
     const clean = text.toUpperCase().replace(/[^A-Z ]/g, "").trim();
     if (!clean || !poses) return;
+    const spd = speed;
     // check for a taught motion sign matching the whole input (or first word)
     const motionKey = Object.keys(motionSigns).find(
       (k) => clean === k || clean.startsWith(k + " ")
@@ -90,16 +93,16 @@ export default function AvatarPage() {
       setFrameWindow(null);
       setMotionWindow(frames);
       setPlaying("motion");
-      const dur = frames.length * 45 + 400;
+      const dur = (frames.length * 45 + 400) / spd;
       if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
       motionTimerRef.current = setTimeout(() => setPlaying("idle"), dur);
     } else {
-      const seq = spellSequence(clean, poses);
+      const seq = spellSequence(clean, poses, { holdMs: 700 / spd, gapMs: 240 / spd });
       setCaption(seq.caption);
       setMotionWindow(null);
       setFrameWindow(seq.frames);
       setPlaying("letters");
-      const dur = seq.frames.length * 45 + 400;
+      const dur = (seq.frames.length * 45 + 400) / spd;
       if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
       motionTimerRef.current = setTimeout(() => setPlaying("idle"), dur);
     }
@@ -139,6 +142,21 @@ export default function AvatarPage() {
           <button className="btn primary" onClick={play} disabled={!text.trim() || !poses}>
             Sign it
           </button>
+        </div>
+        <div className="setting-row">
+          <div>
+            <strong>Speed</strong>
+            <div className="desc">0.5× slow for learning, up to 1.5×</div>
+          </div>
+          <input
+            type="range"
+            min={50}
+            max={150}
+            value={Math.round(speed * 100)}
+            onChange={(e) => setSpeed(Number(e.target.value) / 100)}
+            aria-label="Signing speed"
+          />
+          <span style={{ minWidth: 40, textAlign: "right" }}>{speed.toFixed(1)}×</span>
         </div>
         {Object.keys(motionSigns).length > 0 && (
           <p className="small muted" style={{ marginBottom: 0 }}>
