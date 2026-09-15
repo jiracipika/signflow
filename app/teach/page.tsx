@@ -15,6 +15,7 @@ import {
   type TeachSample,
   type SignLabel,
 } from "@/lib/signs/custom-signs";
+import { untaughtLibraryWords } from "@/lib/signs/library";
 import type { Landmark } from "@/lib/types";
 
 const STATIC_SAMPLES = 5;
@@ -35,6 +36,13 @@ export default function TeachPage() {
 
   useEffect(() => {
     const id = setTimeout(() => setSigns(listSigns()), 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  // library words with no taught/built-in sign yet, as recording candidates
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    const id = setTimeout(() => setSuggestions(untaughtLibraryWords().slice(0, 12)), 0);
     return () => clearTimeout(id);
   }, []);
 
@@ -234,10 +242,38 @@ export default function TeachPage() {
           </div>
         ))}
         <p className="small muted">
-          Built-in &ldquo;I LOVE YOU&rdquo; is a geometric approximation, not trained
-          data — if it misfires, teach your own version and it will usually win.
+          Built-in signs (I LOVE YOU, YES, NO) are geometric approximations, not
+          trained data — if one misfires, teach your own version and it will
+          usually win.
         </p>
       </div>
+
+      {suggestions.length > 0 && (
+        <div className="card">
+          <h2>Common signs you haven&apos;t taught</h2>
+          <p className="small">
+            These come from the{" "}
+            <a href="/library">sign library</a> and still fingerspell on the
+            avatar. Record one and the avatar + word practice will use your
+            motion instead.
+          </p>
+          <div className="btn-row" style={{ flexWrap: "wrap" }}>
+            {suggestions.map((w) => (
+              <button
+                key={w}
+                className="btn"
+                onClick={() => {
+                  setLabel(w);
+                  setMsg(`"${w}" filled in — capture samples and save.`);
+                }}
+                aria-label={`Suggest teaching ${w}`}
+              >
+                {w}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

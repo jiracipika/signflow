@@ -91,7 +91,15 @@ export default function Home() {
           <p>
             <strong>24 static ASL alphabet letters</strong> (A–Z except motion-based J
             and Z, which have manual buttons), plus single-shape word signs like
-            I LOVE YOU — and <strong>anything you teach it</strong> on the Teach page.
+            I LOVE YOU, YES, and NO — and <strong>anything you teach it</strong> on the
+            Teach page.
+          </p>
+          <p>
+            The avatar can also <strong>sign back to you</strong> — fingerspelling with
+            natural letter flow. Browse common words in the{" "}
+            <Link href="/library">sign library</Link>, or drill them in{" "}
+            <Link href="/practice?tab=words">word practice</Link>: watch a word
+            being signed, then type what you saw.
           </p>
           <p>
             This is a <strong>fingerspelling assistant, not a full ASL translator</strong>:
@@ -116,7 +124,9 @@ export default function Home() {
             match the training data (one contributor&apos;s hand). It works best for
             deliberate, paused fingerspelling — not continuous signing. Some letters
             (M/N/T, I/Y) occasionally confuse. J and Z are motion-based and aren&apos;t
-            recognized automatically.
+            recognized automatically. Built-in word signs (I LOVE YOU, YES, NO) are
+            approximate single hand shapes — the real signs add motion, so treat
+            them as hints and learn from the library&apos;s references.
           </p>
         </div>
       </div>

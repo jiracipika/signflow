@@ -10,12 +10,26 @@ This is **not a full ASL translator**. It supports two recognition modes:
 
 1. **Fingerspelling** — the 24 static letters of the ASL alphabet (A–Z except
    motion-based **J** and **Z**, which have manual buttons).
-2. **Word/phrase signs** — single-shape signs like **I LOVE YOU** via built-in
-   geometric templates, and **anything you teach it**: open [Teach](/teach),
+2. **Word/phrase signs** — single-shape signs like **I LOVE YOU**, **YES**, and
+   **NO** via built-in geometric templates (approximations — shape only, no
+   motion), and **anything you teach it**: open [Teach](/teach),
    record 5 samples of a static shape or a 2.5-second motion (e.g. THANK YOU,
    name signs, dynamic gestures), and it becomes locally recognizable
    (normalized landmarks + nearest-prototype for static, DTW for motions).
    Taught signs and samples stay in your browser — nothing is uploaded.
+
+## Signing avatar, library, and word practice
+
+- **[Avatar](/avatar)** — type anything and a canvas hand fingerspells it with
+  natural letter-to-letter flow, real J/Z stroke paths, pause/replay/loop,
+  speed control, and a letter-chip caption synced to the engine's frame spans
+  (tap a chip to replay that letter). Deep link: `/avatar?text=HELLO`.
+- **[Library](/library)** — browsable common words showing how SignFlow renders
+  each one today (taught sign / built-in approximation / fingerspelled), with
+  Lifeprint (ASLU) and Signing Savvy reference links per entry.
+- **[Word practice](/practice?tab=words)** — the avatar signs a common word;
+  you type what you saw. Scored letter-by-letter into the same stats and
+  weak-letter drills as recognition practice.
 
 No accounts, no uploads: camera frames are processed on-device.
 
@@ -47,7 +61,7 @@ No accounts, no uploads: camera frames are processed on-device.
 
     npm install
     npm run dev          # http://localhost:3000
-    npm test             # 23 unit tests (decoder, transcript, trie)
+    npm test             # unit tests (node --test)
     npx tsc --noEmit     # typecheck
     npm run build        # production build (also copies MediaPipe assets)
 
@@ -71,7 +85,8 @@ Note: the "Vercel Authentication" SSO redirect on
 - J and Z are not recognized (motion-based; manual entry provided).
 - Single-collector training data — different hand shapes may reduce accuracy.
 - Designed for deliberate, paused fingerspelling, not continuous signing.
-- The built-in I LOVE YOU template is an approximation (no licensed phrase-sign
-  dataset exists); teach-your-own recordings are more accurate.
+- The built-in I LOVE YOU / YES / NO templates are approximations (single hand
+  shapes; the real signs add motion, and no licensed phrase-sign dataset
+  exists); teach-your-own recordings are more accurate.
 - Word-sign distances are uncalibrated template/DTW scores, not probabilities.
 - Best in Chrome/Edge (desktop, Android) and Safari 16.4+ (iOS). Camera needs HTTPS.
