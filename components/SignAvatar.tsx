@@ -34,6 +34,9 @@ function drawHand(
   h: number,
   opts: { mirrored: boolean; trail?: { x: number; y: number }[] }
 ) {
+  // poses are 21 landmarks; bail on partial/empty data (e.g. before the pose
+  // file loads) rather than crashing the rAF loop on undefined landmarks
+  if (pose.length < 21) return;
   // fit: poses are wrist-origin, palm-size-1
   let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
   for (const p of pose) {

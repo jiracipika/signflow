@@ -46,6 +46,7 @@ export default function RootLayout({
           </Link>
           <a href="/live">Sign</a>
           <a href="/practice">Practice</a>
+          <a href="/library">Library</a>
           <a href="/teach">Teach</a>
           <a href="/avatar">Avatar</a>
           <a href="/settings">Settings</a>

@@ -3,9 +3,9 @@
 // localStorage. Built-in templates are geometric approximations, honestly
 // labeled — Teach mode recordings beat them.
 
-import type { Landmark } from "../types";
-import { normalizeFrame, resampleSequence } from "./normalize";
-import { dtwDistance } from "./dtw";
+import type { Landmark } from "../types.ts";
+import { normalizeFrame, resampleSequence } from "./normalize.ts";
+import { dtwDistance } from "./dtw.ts";
 
 export type SignKind = "static" | "dynamic";
 export type SignLabel = { text: string; kind: SignKind; builtin: boolean };
@@ -63,6 +63,58 @@ const ILY_POSE: Pose = {
   20: [0.72, 0.27, 0.03], // pinky extended up
 };
 
+// YES: fist shape (nodding fist — the approximation is the shape only; the
+// real sign adds the nodding motion). Distinct from ILY: all fingers curled.
+const YES_POSE: Pose = {
+  0: [0.5, 0.9, 0],
+  1: [0.44, 0.78, 0.01],
+  2: [0.4, 0.68, 0.02],
+  3: [0.38, 0.62, 0.03],
+  4: [0.37, 0.58, 0.03], // thumb curled against the side
+  5: [0.44, 0.58, 0],
+  6: [0.45, 0.5, 0.04],
+  7: [0.45, 0.48, 0.09],
+  8: [0.44, 0.52, 0.12], // index curled to palm
+  9: [0.5, 0.57, 0],
+  10: [0.5, 0.49, 0.04],
+  11: [0.5, 0.47, 0.09],
+  12: [0.5, 0.51, 0.12], // middle curled
+  13: [0.56, 0.57, 0],
+  14: [0.56, 0.49, 0.04],
+  15: [0.56, 0.47, 0.09],
+  16: [0.56, 0.51, 0.12], // ring curled
+  17: [0.62, 0.58, 0],
+  18: [0.62, 0.5, 0.04],
+  19: [0.62, 0.48, 0.09],
+  20: [0.62, 0.52, 0.12], // pinky curled
+};
+
+// NO: index + middle extended (tapping fingers — approximation is the shape
+// only; the real sign taps index+middle down toward the thumb).
+const NO_POSE: Pose = {
+  0: [0.5, 0.9, 0],
+  1: [0.42, 0.8, 0],
+  2: [0.37, 0.72, 0.01],
+  3: [0.34, 0.66, 0.02],
+  4: [0.32, 0.62, 0.03], // thumb across palm
+  5: [0.43, 0.56, 0],
+  6: [0.42, 0.46, 0],
+  7: [0.41, 0.37, 0],
+  8: [0.4, 0.28, 0], // index extended up
+  9: [0.5, 0.56, 0],
+  10: [0.49, 0.46, 0],
+  11: [0.48, 0.37, 0],
+  12: [0.47, 0.28, 0], // middle extended up
+  13: [0.57, 0.57, -0.01],
+  14: [0.57, 0.5, 0.03],
+  15: [0.57, 0.52, 0.08],
+  16: [0.57, 0.54, 0.12], // ring curled
+  17: [0.64, 0.58, -0.01],
+  18: [0.64, 0.51, 0.03],
+  19: [0.64, 0.53, 0.08],
+  20: [0.64, 0.55, 0.12], // pinky curled
+};
+
 const BUILTINS: StoredSign[] = [
   {
     label: "I LOVE YOU",
@@ -70,7 +122,25 @@ const BUILTINS: StoredSign[] = [
     builtin: true,
     prototypes: [[buildFrame(ILY_POSE)]],
   },
+  {
+    label: "YES",
+    kind: "static",
+    builtin: true,
+    prototypes: [[buildFrame(YES_POSE)]],
+  },
+  {
+    label: "NO",
+    kind: "static",
+    builtin: true,
+    prototypes: [[buildFrame(NO_POSE)]],
+  },
 ];
+
+/** The built-in (non-taught) sign set — used by the library page and teach
+ *  suggestions. Approximate static one-shape poses, not certified forms. */
+export function builtinSigns(): SignLabel[] {
+  return BUILTINS.map(({ label, kind, builtin }) => ({ text: label, kind, builtin }));
+}
 
 // ---------- storage ----------
 
