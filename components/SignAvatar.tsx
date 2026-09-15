@@ -127,11 +127,15 @@ export default function SignAvatar({
   motion,
   mirrored = false,
   label,
+  paused = false,
+  onFrameIndex,
 }: {
   currentPose: Pose[] | null;
   motion?: Pose[][] | null;
   mirrored?: boolean;
   label?: string;
+  paused?: boolean;
+  onFrameIndex?: (i: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const poseRef = useRef<Pose[] | null>(null);
@@ -140,6 +144,10 @@ export default function SignAvatar({
   const motionIdxRef = useRef(0);
   const trailRef = useRef<{ x: number; y: number }[]>([]);
   const rafRef = useRef(0);
+  const pausedRef = useRef(paused);
+  const onFrameIdxRef = useRef(onFrameIndex);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { onFrameIdxRef.current = onFrameIndex; }, [onFrameIndex]);
 
   useEffect(() => {
     targetRef.current = currentPose ?? null;
@@ -173,8 +181,9 @@ export default function SignAvatar({
       const m = motionRef.current;
       if (m && m.length > 0) {
         const holdMs = 45;
-        motionIdxRef.current += dt / holdMs;
+        if (!pausedRef.current) motionIdxRef.current += dt / holdMs;
         const i = Math.floor(motionIdxRef.current) % m.length;
+        if (onFrameIdxRef.current) onFrameIdxRef.current(i);
         const cur = poseRef.current;
         poseRef.current = cur && cur.length === 21 ? lerpPose(cur, m[i], 0.5) : m[i];
         // trail from index fingertip (normalized coords for trail drawing)
