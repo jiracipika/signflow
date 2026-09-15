@@ -9,11 +9,13 @@ import { loadStats, recordRound, resetStats, weakestLetters, type PracticeStats 
 import type { Landmark } from "@/lib/types";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
 import SignAvatar, { type Pose } from "@/components/SignAvatar";
+import WordPractice from "@/components/WordPractice";
 
 const STATIC_LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXY".split("");
 const PRACTICE_WORDS = ["HI", "OK", "CAT", "DOG", "YOU", "EAT", "BYE"];
 
 type Mode = { kind: "letter"; target: string } | { kind: "word"; target: string };
+type Tab = "recognition" | "words";
 
 type Feedback =
   | { state: "idle" }
@@ -23,6 +25,7 @@ type Feedback =
 
 export default function PracticePage() {
   const [settings] = useSettings();
+  const [tab, setTab] = useState<Tab>("recognition");
   const [mode, setMode] = useState<Mode>({ kind: "letter", target: "A" });
   const [feedback, setFeedback] = useState<Feedback>({ state: "idle" });
   const [modelReady, setModelReady] = useState(false);
@@ -43,6 +46,12 @@ export default function PracticePage() {
     wordIdxRef.current = 0;
     setWordIdx(0);
   };
+
+  // ?tab=words deep link (linked from the library page)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("tab");
+    if (q === "words") setTab("words");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,18 +231,33 @@ export default function PracticePage() {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>Practice</h2>
-          {stats && stats.streakCurrent > 0 && (
-            <span className="tag ok" title="Days in a row with at least one recognized letter">
-              🔥 {stats.streakCurrent}-day streak
-            </span>
-          )}
+          <div className="btn-row" style={{ margin: 0 }}>
+            <button className="btn" aria-pressed={tab === "recognition"} onClick={() => setTab("recognition")}>
+              Recognition
+            </button>
+            <button className="btn" aria-pressed={tab === "words"} onClick={() => setTab("words")}>
+              Words
+            </button>
+            {stats && stats.streakCurrent > 0 && (
+              <span className="tag ok" title="Days in a row with at least one recognized letter">
+                🔥 {stats.streakCurrent}-day streak
+              </span>
+            )}
+          </div>
         </div>
-        <p>
-          Pick a letter or a short word, start the camera, and hold the sign steady.
-          Practice uses the same recognition system as the live workspace, so results
-          reflect real model behavior — including its mistakes.
-        </p>
-        {weak.length > 0 && (
+        {tab === "recognition" ? (
+          <p>
+            Pick a letter or a short word, start the camera, and hold the sign steady.
+            Practice uses the same recognition system as the live workspace, so results
+            reflect real model behavior — including its mistakes.
+          </p>
+        ) : (
+          <p>
+            Watch the avatar sign a common word, then type what you saw. Every letter
+            you read correctly feeds the same stats and weak-letter drills.
+          </p>
+        )}
+        {tab === "recognition" && weak.length > 0 && (
           <div className="btn-row">
             <span className="small muted" style={{ alignSelf: "center" }}>Weakest letters:</span>
             {weak.map((l) => (
@@ -248,69 +272,76 @@ export default function PracticePage() {
             ))}
           </div>
         )}
-        <div className="letter-grid" role="listbox" aria-label="Choose a letter">
-          {STATIC_LETTERS.map((L) => {
-            const acc = letterAcc(L);
-            const state =
-              acc === null ? undefined : acc.acc >= 0.8 ? "done" : acc.acc < 0.5 ? "partial" : undefined;
-            return (
-              <button
-                key={L}
-                role="option"
-                aria-selected={mode.kind === "letter" && mode.target === L}
-                className="letter-cell"
-                data-state={mode.kind === "letter" && mode.target === L ? "partial" : state}
-                onClick={() => pickNew({ kind: "letter", target: L })}
-              >
-                {L}
-                {acc !== null && <small>{Math.round(acc.acc * 100)}%</small>}
-              </button>
-            );
-          })}
-        </div>
-        <div className="btn-row" style={{ marginTop: 12 }}>
-          {PRACTICE_WORDS.map((w) => (
-            <button
-              key={w}
-              className="btn"
-              aria-pressed={mode.kind === "word" && mode.target === w}
-              onClick={() => pickNew({ kind: "word", target: w })}
-            >
-              {w}
-            </button>
-          ))}
-        </div>
+        {tab === "recognition" && (
+          <>
+            <div className="letter-grid" role="listbox" aria-label="Choose a letter">
+              {STATIC_LETTERS.map((L) => {
+                const acc = letterAcc(L);
+                const state =
+                  acc === null ? undefined : acc.acc >= 0.8 ? "done" : acc.acc < 0.5 ? "partial" : undefined;
+                return (
+                  <button
+                    key={L}
+                    role="option"
+                    aria-selected={mode.kind === "letter" && mode.target === L}
+                    className="letter-cell"
+                    data-state={mode.kind === "letter" && mode.target === L ? "partial" : state}
+                    onClick={() => pickNew({ kind: "letter", target: L })}
+                  >
+                    {L}
+                    {acc !== null && <small>{Math.round(acc.acc * 100)}%</small>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="btn-row" style={{ marginTop: 12 }}>
+              {PRACTICE_WORDS.map((w) => (
+                <button
+                  key={w}
+                  className="btn"
+                  aria-pressed={mode.kind === "word" && mode.target === w}
+                  onClick={() => pickNew({ kind: "word", target: w })}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="live-layout">
-        <section>
-          <div className="camera-wrap">
-            <video ref={videoRef} playsInline muted autoPlay className={running ? "mirrored" : ""} />
-            {running && settings.showLandmarks && (
-              <LandmarkOverlay landmarks={landmarks} mirrored />
-            )}
-            {!running && (
-              <div className="camera-overlay">
-                <div className="perm-icon" aria-hidden="true">🤟</div>
-                <strong>Camera is off</strong>
-                <p className="small muted" style={{ margin: 0 }}>
-                  Everything runs on your device.
-                </p>
-              </div>
-            )}
-          </div>
-          <div className="btn-row" style={{ marginTop: 10 }}>
-            {running ? (
-              <button className="btn" onClick={stop}>Stop camera</button>
-            ) : (
-              <button className="btn primary" onClick={startCamera} disabled={!modelReady}>
-                Start practicing
-              </button>
-            )}
-          </div>
-        </section>
+      {tab === "words" ? (
+        <WordPractice onStats={setStats} />
+      ) : (
+        <div className="live-layout">
+          <section>
+            <div className="camera-wrap">
+              <video ref={videoRef} playsInline muted autoPlay className={running ? "mirrored" : ""} />
+              {running && settings.showLandmarks && (
+                <LandmarkOverlay landmarks={landmarks} mirrored />
+              )}
+              {!running && (
+                <div className="camera-overlay">
+                  <div className="perm-icon" aria-hidden="true">🤟</div>
+                  <strong>Camera is off</strong>
+                  <p className="small muted" style={{ margin: 0 }}>
+                    Everything runs on your device.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="btn-row" style={{ marginTop: 10 }}>
+              {running ? (
+                <button className="btn" onClick={stop}>Stop camera</button>
+              ) : (
+                <button className="btn primary" onClick={startCamera} disabled={!modelReady}>
+                  Start practicing
+                </button>
+              )}
+            </div>
+          </section>
 
-        <section className="card" aria-live="polite">
+          <section className="card" aria-live="polite">
           <h2>
             {mode.kind === "letter"
               ? `Sign the letter ${mode.target}`
@@ -388,8 +419,9 @@ export default function PracticePage() {
               single-letter mode.
             </p>
           )}
-        </section>
-      </div>
+          </section>
+        </div>
+      )}
 
       {stats && Object.keys(stats.letters).length > 0 && (
         <div className="card">
