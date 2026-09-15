@@ -258,7 +258,7 @@ export default function PracticePage() {
                 key={L}
                 role="option"
                 aria-selected={mode.kind === "letter" && mode.target === L}
-                className="letter-chip"
+                className="letter-cell"
                 data-state={mode.kind === "letter" && mode.target === L ? "partial" : state}
                 onClick={() => pickNew({ kind: "letter", target: L })}
               >

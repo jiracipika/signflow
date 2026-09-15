@@ -1,12 +1,14 @@
 "use client";
 
-// Avatar page v2: a proper sign player. Type anything (or tap a phrase chip)
-// and the avatar signs it; pause/resume, replay, loop, speed, a progress bar,
-// and a caption strip with per-letter replay synced to the engine's frame
-// spans. Taught dynamic signs (Teach page) still take precedence.
+// Avatar page: a proper sign player on a stage. Type anything (or tap a
+// phrase chip) and the avatar signs it; pause/resume, replay, stop, loop,
+// speed, a progress bar, and a mono caption strip with per-letter replay
+// synced to the engine's frame spans. Taught dynamic signs (Teach page)
+// still take precedence.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import SignAvatar, { type Pose } from "@/components/SignAvatar";
+import SignAvatar from "@/components/SignAvatar";
+import type { Pose } from "@/components/SignAvatar";
 import { spellSequence, FRAME_MS, type SignSequence } from "@/lib/signs/avatar-engine";
 import { loadSigns } from "@/lib/signs/custom-signs";
 
@@ -118,7 +120,6 @@ export default function AvatarPage() {
     if (motionKey) {
       const frames = motionSigns[motionKey];
       setCaption(motionKey);
-      setSeq(null);
       setPlaying("motion");
       setSeq({ frames, caption: motionKey, spans: [], words: [] });
       armCompletion(frames.length);
@@ -159,15 +160,14 @@ export default function AvatarPage() {
   };
 
   const activeSpan = useMemo(() => {
-    if (!seq || playing === "idle") return null;
-    if (seq.spans.length === 0) return null;
+    if (!seq || playing === "idle" || seq.spans.length === 0) return null;
     return seq.spans.find((sp) => frameIdx >= sp.start && frameIdx < sp.end) ?? null;
   }, [seq, frameIdx, playing]);
 
   const replayLetter = (sp: { start: number; end: number }) => {
     if (!seq) return;
     const slice = seq.frames.slice(sp.start, sp.end);
-    setSeq({ ...seq, frames: [...slice], spans: [], words: [] });
+    setSeq({ ...seq, frames: slice, spans: [], words: [] });
     setFrameIdx(0);
     setPlaying("letters");
     setPaused(false);
@@ -176,12 +176,11 @@ export default function AvatarPage() {
 
   return (
     <>
-      <div className="card">
+      <div className="card reveal" style={{ "--i": 0 } as React.CSSProperties}>
         <h2>Signing avatar</h2>
         <p>
           Type anything and the avatar signs it — letters flow into each other the
-          way fingerspelling actually moves, with real J and Z stroke paths. Hand
-          shapes come from real average landmarks of the training dataset.
+          way fingerspelling actually moves, with real J and Z stroke paths.
         </p>
         <div className="btn-row" style={{ flexWrap: "nowrap" }}>
           <input
@@ -198,55 +197,22 @@ export default function AvatarPage() {
             Sign it
           </button>
         </div>
-
-        <div className="btn-row" style={{ marginTop: 10 }}>
-          {playing !== "idle" && (
-            <>
-              <button className="btn" onClick={() => setPaused((p) => !p)}>
-                {paused ? "Resume" : "Pause"}
-              </button>
-              <button className="btn" onClick={() => play()}>Replay</button>
-              <button className="btn" onClick={stop}>Stop</button>
-            </>
-          )}
-          <label className="small" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
-            Loop
-          </label>
-        </div>
-
-        <div className="setting-row">
-          <div>
-            <strong>Speed</strong>
-            <div className="desc">0.5× slow for learning, up to 1.5×</div>
-          </div>
-          <input
-            type="range"
-            min={50}
-            max={150}
-            value={Math.round(speed * 100)}
-            onChange={(e) => setSpeed(Number(e.target.value) / 100)}
-            aria-label="Signing speed"
-          />
-          <span style={{ minWidth: 40, textAlign: "right" }}>{speed.toFixed(1)}×</span>
-        </div>
-
-        <div className="btn-row" style={{ marginTop: 8 }}>
+        <div className="phrase-row" aria-label="Common phrases">
           {PHRASES.map((p) => (
-            <button key={p} className="btn" onClick={() => { setText(p); play(p); }}>
+            <button key={p} className="phrase-chip" onClick={() => { setText(p); play(p); }}>
               {p.toLowerCase()}
             </button>
           ))}
         </div>
         {Object.keys(motionSigns).length > 0 && (
-          <p className="small muted" style={{ marginBottom: 0 }}>
+          <p className="small muted" style={{ marginBottom: 0, marginTop: 10 }}>
             Taught motion signs take precedence: {Object.keys(motionSigns).join(", ")}
           </p>
         )}
       </div>
 
       <div className="live-layout">
-        <section>
+        <section className="reveal" style={{ "--i": 1 } as React.CSSProperties}>
           {error ? (
             <div className="card" role="alert">
               <strong>Could not load pose data.</strong>
@@ -255,54 +221,89 @@ export default function AvatarPage() {
             </div>
           ) : (
             <>
-              <SignAvatar
-                currentPose={playing === "idle" ? restPose : null}
-                motion={playing !== "idle" ? seq?.frames ?? null : null}
-                paused={paused}
-                onFrameIndex={setFrameIdx}
-                label={playing !== "idle" ? caption || undefined : undefined}
-              />
-              {playing !== "idle" && seq && (
-                <div className="card" style={{ marginTop: 10 }}>
-                  <div
-                    role="progressbar"
-                    aria-label="Signing progress"
-                    aria-valuemin={0}
-                    aria-valuemax={seq.frames.length}
-                    aria-valuenow={frameIdx}
-                    style={{
-                      height: 6, borderRadius: 3, background: "var(--border)",
-                      overflow: "hidden", marginBottom: 10,
-                    }}
+              <div className="stage">
+                <SignAvatar
+                  currentPose={playing === "idle" ? restPose : null}
+                  motion={playing !== "idle" ? seq?.frames ?? null : null}
+                  paused={paused}
+                  onFrameIndex={setFrameIdx}
+                />
+                {playing !== "idle" && caption && (
+                  <div className="stage-caption" aria-live="polite">{caption}</div>
+                )}
+              </div>
+
+              <div className="transport">
+                {playing !== "idle" ? (
+                  <>
+                    <button className="btn" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
+                      {paused ? "▶ Resume" : "⏸ Pause"}
+                    </button>
+                    <button className="btn" onClick={() => play()}>↻ Replay</button>
+                    <button className="btn ghost" onClick={stop}>■ Stop</button>
+                  </>
+                ) : (
+                  <button
+                    className="btn primary"
+                    onClick={() => play()}
+                    disabled={!text.trim() || !poses}
                   >
+                    ▶ Sign it
+                  </button>
+                )}
+                <span className="spacer" />
+                <label className="small" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={loop}
+                    onChange={(e) => setLoop(e.target.checked)}
+                    aria-label="Loop signing"
+                  />
+                  Loop
+                </label>
+                <label className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  Speed
+                  <input
+                    type="range"
+                    min={50}
+                    max={150}
+                    value={Math.round(speed * 100)}
+                    onChange={(e) => setSpeed(Number(e.target.value) / 100)}
+                    aria-label="Signing speed"
+                    style={{ width: 90 }}
+                  />
+                  <span style={{ minWidth: 34, textAlign: "right" }}>{speed.toFixed(1)}×</span>
+                </label>
+              </div>
+
+              {playing !== "idle" && seq && (
+                <div className="card">
+                  <div className="progress" role="progressbar" aria-label="Signing progress">
                     <div
                       style={{
-                        height: "100%",
                         width: `${Math.min(100, (frameIdx / Math.max(1, seq.frames.length)) * 100)}%`,
-                        background: "var(--accent, #4f9cff)",
-                        transition: "width 60ms linear",
                       }}
                     />
                   </div>
-                  <div className="btn-row" aria-label="Fingerspelled letters">
+                  <div className="letter-strip" aria-label="Fingerspelled letters">
                     {caption.split("").map((ch, i) =>
                       ch === " " ? (
-                        <span key={i} style={{ width: 8 }} />
+                        <span key={i} className="letter-gap" aria-hidden="true" />
                       ) : (
                         <button
                           key={i}
-                          className="btn"
-                          style={
-                            activeSpan && activeSpan.letter === ch && frameIdx >= activeSpan.start
-                              ? { borderColor: "var(--accent, #4f9cff)", color: "var(--accent, #4f9cff)" }
-                              : undefined
-                          }
+                          className="letter-chip"
+                          data-active={!!activeSpan && activeSpan.letter === ch}
                           onClick={() => {
-                            const sp = seq.spans.find(
-                              (s) => s.letter === ch && i >= (caption.slice(0, i).split("").filter((c) => c !== " ").length)
-                            );
+                            // replay the i-th non-space letter's span
+                            const seen: string[] = [];
+                            const sp = seq.spans.find((s) => {
+                              if (s.letter === ch && seen.length === i - seen.filter((_, j) => j < i && caption[j] !== " ").length) return true;
+                              return false;
+                            }) ?? seq.spans.filter((s) => s.letter === ch)[
+                              caption.slice(0, i).split("").filter((c) => c !== " ").length
+                            ];
                             if (sp) replayLetter(sp);
-                            else if (seq.spans.length) replayLetter(seq.spans[0]);
                           }}
                           title={`Replay ${ch}`}
                         >
@@ -311,7 +312,7 @@ export default function AvatarPage() {
                       )
                     )}
                   </div>
-                  <p className="small muted" style={{ marginBottom: 0 }}>
+                  <p className="small muted" style={{ margin: "4px 0 0" }}>
                     Tap a letter to replay just that sign.
                   </p>
                 </div>
@@ -319,7 +320,7 @@ export default function AvatarPage() {
             </>
           )}
         </section>
-        <section className="card">
+        <section className="card reveal" style={{ "--i": 2 } as React.CSSProperties}>
           <h2>About this avatar</h2>
           <p className="small">
             Each letter&apos;s shape is the <strong>mean of hundreds of real hand

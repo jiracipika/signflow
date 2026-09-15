@@ -223,9 +223,6 @@ export default function SignAvatar({
         width: "100%",
         aspectRatio: "1",
         display: "block",
-        background: "var(--card2)",
-        borderRadius: "var(--radius)",
-        border: "1px solid var(--border)",
       }}
     />
   );
