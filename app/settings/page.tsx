@@ -94,8 +94,8 @@ export default function SettingsPage() {
           <div>
             <strong>Automatic commit</strong>
             <div className="desc">
-              Commit a letter automatically after holding it still. Off by default —
-              manual commit is more reliable.
+              Commit a letter automatically after a short steady hold. Turn this
+              off to review and commit every letter yourself.
             </div>
           </div>
           <label className="switch">

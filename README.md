@@ -3,8 +3,10 @@
 **Live:** https://signflow-five.vercel.app · **Source:** https://github.com/jiracipika/signflow
 
 An **ASL fingerspelling assistant** that runs entirely in your browser: the camera
-tracks your hand, a trained classifier recognizes static alphabet letters, you
-commit letters into text, and a prefix trie suggests whole words.
+tracks your hand, a trained classifier recognizes static alphabet letters, a
+temporal decoder builds text as you sign, and a prefix trie suggests whole words.
+Stable letters commit automatically by default; you can still correct the text or
+switch to manual commits in Settings.
 
 This is **not a full ASL translator**. It supports two recognition modes:
 

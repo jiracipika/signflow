@@ -9,10 +9,10 @@ import type {
 } from "./types";
 
 const DEFAULTS: DecoderConfig = {
-  stabilityFrames: 6,
-  minConfidence: 0.5,
-  autoCommit: false,
-  autoCommitFrames: 24,
+  stabilityFrames: 4,
+  minConfidence: 0.42,
+  autoCommit: true,
+  autoCommitFrames: 8,
 };
 
 const LOST_AFTER = 30; // null/low frames -> tracking lost

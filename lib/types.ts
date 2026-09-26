@@ -18,13 +18,13 @@ export type LetterPrediction = {
 // ---------------- temporal decoder ----------------
 
 export type DecoderConfig = {
-  /** frames of stable prediction before a letter becomes "settled" (default 6) */
+  /** frames of stable prediction before a letter becomes "settled" (default 4) */
   stabilityFrames: number;
   /** min softmax confidence to consider a prediction valid (default 0.5) */
   minConfidence: number;
-  /** if enabled, settled letters auto-commit after holdFrames (default off) */
+  /** if enabled, settled letters auto-commit after holdFrames (default on) */
   autoCommit: boolean;
-  /** frames of stillness before auto-commit fires (default 24) */
+  /** frames of stillness before auto-commit fires (default 8) */
   autoCommitFrames: number;
 };
 
