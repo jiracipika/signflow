@@ -67,6 +67,13 @@ h1, h2, h3 {
   padding: 16px 16px calc(32px + var(--safe-bottom));
 }
 
+/* The camera workbench needs room to breathe on desktop while the rest of the
+   app stays focused and readable at the narrower 720px measure. */
+.container:has(.live-workspace) {
+  max-width: 1240px;
+  padding-top: 28px;
+}
+
 /* ---------- nav ---------- */
 .topnav {
   display: flex;
@@ -203,9 +210,49 @@ h1, h2, h3 {
 }
 @media (min-width: 900px) {
   .live-layout {
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
     align-items: start;
+    gap: 20px;
   }
+}
+
+.live-workspace { --workspace-glow: color-mix(in srgb, var(--accent) 9%, transparent); }
+.workspace-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 4px 0 22px;
+}
+.workspace-heading h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.02;
+  margin: 8px 0 9px;
+}
+.workspace-heading p { margin: 0; color: var(--muted); max-width: 58ch; }
+.eyebrow {
+  color: var(--accent);
+  font: 700 11px/1 var(--font-mono);
+  letter-spacing: .14em;
+}
+.privacy-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  font-size: 12px;
+  font-weight: 650;
+}
+.privacy-pill > span { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 12px color-mix(in srgb, var(--ok) 70%, transparent); }
+.privacy-pill.is-live { color: var(--text); border-color: color-mix(in srgb, var(--ok) 28%, var(--border)); }
+@media (max-width: 620px) {
+  .workspace-heading { align-items: flex-start; flex-direction: column; margin-bottom: 16px; }
+  .privacy-pill { margin-top: -4px; }
 }
 
 .camera-wrap {
@@ -214,7 +261,8 @@ h1, h2, h3 {
   border-radius: var(--radius);
   overflow: hidden;
   aspect-ratio: 4 / 3;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .24), inset 0 0 0 1px rgba(255,255,255,.025);
 }
 .camera-wrap video {
   width: 100%;
@@ -238,9 +286,41 @@ h1, h2, h3 {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: rgba(10, 10, 15, 0.72);
+  background: radial-gradient(ellipse at 50% 45%, rgba(25, 35, 55, .68), rgba(10, 10, 15, .82));
   text-align: center;
   padding: 20px;
+}
+.live-workspace .card {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--card) 96%, white 4%), var(--card));
+  border-color: color-mix(in srgb, var(--accent) 10%, var(--border));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .13);
+  padding: clamp(16px, 2vw, 22px);
+}
+.live-workspace .card h2 { letter-spacing: -.015em; }
+.live-workspace .tentative-letter {
+  min-height: 100px;
+  padding: 12px 16px;
+  margin: 10px 0 12px;
+  border-radius: 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 21%, var(--border));
+  background: radial-gradient(circle at 16% 50%, var(--workspace-glow), transparent 62%), var(--card2);
+}
+.live-workspace .tentative-letter > span:first-child:not(.muted) {
+  color: #fff;
+  text-shadow: 0 0 28px color-mix(in srgb, var(--accent) 54%, transparent);
+  animation: letter-arrive 220ms var(--ease-out);
+}
+@keyframes letter-arrive { from { opacity: .35; transform: translateY(5px) scale(.94); } to { opacity: 1; transform: none; } }
+.live-workspace .transcript-box {
+  min-height: 116px;
+  background: #101019;
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  font-size: clamp(22px, 2.4vw, 30px);
+  letter-spacing: .025em;
+}
+.live-workspace .control-grid .btn { min-height: 46px; }
+@media (prefers-reduced-motion: reduce) {
+  .live-workspace .tentative-letter > span:first-child:not(.muted) { animation: none; }
 }
 .camera-overlay .perm-icon { font-size: 40px; }
 

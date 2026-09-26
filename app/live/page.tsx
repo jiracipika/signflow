@@ -33,6 +33,7 @@ export default function LivePage() {
   const recordingMotionRef = useRef(false);
   const motionBufRef = useRef<Landmark[][]>([]);
   const [hasSigns, setHasSigns] = useState(false);
+  const lastUiFrameAtRef = useRef(0);
 
   const top3Ref = useRef<[string, number][]>([]);
   const [top3, setTop3] = useState<[string, number][]>([]);
@@ -85,7 +86,6 @@ export default function LivePage() {
 
   const onFrame = useCallback(
     (frame: import("@/lib/types").HandFrame | null) => {
-      setLandmarks(frame ? frame.landmarks : null);
       const d = decoderRef.current;
       if (!d || !modelReady) return;
       const pred = frame ? predictLandmarks(frame.landmarks) : null;
@@ -115,13 +115,27 @@ export default function LivePage() {
           pending.reduce((acc, ch) => acc.apply({ type: "letter", letter: ch }), t)
         );
       }
-      setDecoderState((prev) => ({
-        ...prev,
-        tentative: state.tentative,
-        tentativeConfidence: state.tentativeConfidence,
-        tracking: state.tracking,
-      }));
-      setTop3([...top3Ref.current]);
+      // Keep landmark inference at camera cadence, but render the React UI at
+      // 10 fps. The old per-camera-frame state updates forced the whole live
+      // workspace to reconcile 30 times a second on mobile.
+      const now = performance.now();
+      if (now - lastUiFrameAtRef.current >= 100) {
+        lastUiFrameAtRef.current = now;
+        setLandmarks(frame ? frame.landmarks : null);
+        setDecoderState((prev) => {
+          if (
+            prev.tentative === state.tentative &&
+            prev.tentativeConfidence === state.tentativeConfidence &&
+            prev.tracking === state.tracking
+          ) return prev;
+          return {
+            tentative: state.tentative,
+            tentativeConfidence: state.tentativeConfidence,
+            tracking: state.tracking,
+          };
+        });
+        setTop3([...top3Ref.current]);
+      }
     },
     [modelReady]
   );
@@ -224,7 +238,18 @@ export default function LivePage() {
     : "Tracking lost — show your hand";
 
   return (
-    <div className="live-layout">
+    <div className="live-workspace">
+      <header className="workspace-heading">
+        <div>
+          <span className="eyebrow">SIGNFLOW · LIVE WORKSPACE</span>
+          <h1>Spell in real time.</h1>
+          <p>Hold each ASL letter briefly. SignFlow follows your hand and builds the word as you go.</p>
+        </div>
+        <span className={`privacy-pill ${running ? "is-live" : ""}`}>
+          <span /> {running ? "Camera stays on this device" : "Private, on-device recognition"}
+        </span>
+      </header>
+      <div className="live-layout">
       {/* left: camera + status */}
       <section aria-label="Camera">
         <div className="camera-wrap">
@@ -233,10 +258,13 @@ export default function LivePage() {
             playsInline
             muted
             autoPlay
-            className={running && facing === "user" ? "mirrored" : ""}
+            className={running && facing === "user" && settings.mirrorPreview ? "mirrored" : ""}
           />
           {running && settings.showLandmarks && (
-            <LandmarkOverlay landmarks={landmarks} mirrored={facing === "user"} />
+            <LandmarkOverlay
+              landmarks={landmarks}
+              mirrored={facing === "user" && settings.mirrorPreview}
+            />
           )}
           {!running && (
             <div className="camera-overlay" role="status">
@@ -371,8 +399,8 @@ export default function LivePage() {
             </div>
           )}
           <p className="small muted" style={{ marginTop: 8 }}>
-            For a double letter (like &ldquo;LL&rdquo;), commit, lower your hand briefly,
-            then sign it again. Keyboard: Enter = commit, Space, Backspace, Ctrl/Cmd+Z.
+            Letters add themselves after a steady hold. For a double letter, release the
+            hand shape briefly before signing it again. Enter can commit the current letter early.
           </p>
         </div>
 
@@ -502,6 +530,7 @@ export default function LivePage() {
           </p>
         </div>
       </section>
+      </div>
     </div>
   );
 }

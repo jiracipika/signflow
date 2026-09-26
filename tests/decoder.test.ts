@@ -10,7 +10,7 @@ const P = (letter: string, confidence = 0.9): LetterPrediction => ({
 });
 
 test("stable letter becomes tentative", () => {
-  const d = new TemporalDecoder({ stabilityFrames: 4 });
+  const d = new TemporalDecoder({ stabilityFrames: 4, autoCommit: false });
   for (let i = 0; i < 10; i++) d.push(P("A"), i * 33);
   const s = d.getState();
   assert.equal(s.tentative, "A");
@@ -25,8 +25,16 @@ test("held pose with autoCommit emits exactly one letter", () => {
   assert.equal(pending[0], "B");
 });
 
+test("default decoder follows a continuous change from one letter to another", () => {
+  const d = new TemporalDecoder();
+  let time = 0;
+  for (let i = 0; i < 24; i++, time += 33) d.push(P("A"), time);
+  for (let i = 0; i < 24; i++, time += 33) d.push(P("B"), time);
+  assert.deepEqual(d.drainPending(), ["A", "B"]);
+});
+
 test("manual commit clears tentative; re-commit needs re-stabilization", () => {
-  const d = new TemporalDecoder({ stabilityFrames: 4 });
+  const d = new TemporalDecoder({ stabilityFrames: 4, autoCommit: false });
   for (let i = 0; i < 10; i++) d.push(P("A"), i * 33);
   assert.equal(d.commitLetter(), "A");
   // immediately after, tentative is null even though pose is still held,

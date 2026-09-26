@@ -18,9 +18,11 @@ export const DEFAULT_SETTINGS: Settings = {
   dominantHand: "right",
   mirrorPreview: true,
   showLandmarks: true,
-  stabilityFrames: 6,
-  minConfidence: 0.5,
-  autoCommit: false,
+  // Faster defaults make ordinary fingerspelling feel continuous. Each can
+  // still be tuned in Settings when a slower or more conservative pace helps.
+  stabilityFrames: 4,
+  minConfidence: 0.42,
+  autoCommit: true,
   saveTranscripts: false,
 };
 
