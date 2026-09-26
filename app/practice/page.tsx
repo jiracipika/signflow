@@ -49,8 +49,11 @@ export default function PracticePage() {
 
   // ?tab=words deep link (linked from the library page)
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("tab");
-    if (q === "words") setTab("words");
+    const id = setTimeout(() => {
+      const q = new URLSearchParams(window.location.search).get("tab");
+      if (q === "words") setTab("words");
+    }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   useEffect(() => {
