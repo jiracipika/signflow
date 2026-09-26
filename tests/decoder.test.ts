@@ -33,6 +33,20 @@ test("default decoder follows a continuous change from one letter to another", (
   assert.deepEqual(d.drainPending(), ["A", "B"]);
 });
 
+test("default auto-commit uses elapsed time when camera frame rate is low", () => {
+  const d = new TemporalDecoder();
+  for (let i = 0; i < 8; i++) d.push(P("C"), i * 100);
+  assert.deepEqual(d.drainPending(), ["C"]);
+});
+
+test("stability scales with elapsed time instead of requiring a fixed frame count", () => {
+  const d = new TemporalDecoder({ stabilityFrames: 6, autoCommit: false });
+  d.push(P("D"), 0);
+  d.push(P("D"), 100);
+  d.push(P("D"), 200);
+  assert.equal(d.getState().tentative, "D");
+});
+
 test("manual commit clears tentative; re-commit needs re-stabilization", () => {
   const d = new TemporalDecoder({ stabilityFrames: 4, autoCommit: false });
   for (let i = 0; i < 10; i++) d.push(P("A"), i * 33);

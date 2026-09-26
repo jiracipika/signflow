@@ -52,8 +52,8 @@ export default function SettingsPage() {
           <div>
             <strong>Stability</strong>
             <div className="desc">
-              Frames a letter must stay steady before it becomes tentative
-              (higher = steadier but slower)
+              How long a handshape must stay steady before it becomes a letter.
+              Higher values reduce flicker but respond more slowly.
             </div>
           </div>
           <input

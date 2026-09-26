@@ -13,6 +13,7 @@ const DEFAULTS: DecoderConfig = {
   minConfidence: 0.42,
   autoCommit: true,
   autoCommitFrames: 8,
+  autoCommitMs: 240,
 };
 
 const LOST_AFTER = 30; // null/low frames -> tracking lost
@@ -26,11 +27,14 @@ export class TemporalDecoder implements Decoder {
   private winSize = 8;
   private stabilityCount = 0;
   private lastMajority: string | null = null;
+  private majoritySinceMs: number | null = null;
   private nullCount = 0;
   private tracking: DecoderState["tracking"] = "searching";
   private tentative: string | null = null;
   private tentativeConfidence = 0;
   private settledCount = 0; // pushes the current tentative has persisted
+  private tentativeSinceMs: number | null = null;
+  private autoCommitFramesExplicit = false;
   private pending: string[] = [];
   // after a commit (auto or manual), the same letter cannot re-arm until the
   // majority changes or the signal drops — this is what makes held poses emit
@@ -43,6 +47,7 @@ export class TemporalDecoder implements Decoder {
 
   configure(cfg: Partial<DecoderConfig>): void {
     this.cfg = { ...this.cfg, ...cfg };
+    if (cfg.autoCommitFrames !== undefined) this.autoCommitFramesExplicit = true;
     if (cfg.stabilityFrames !== undefined) this.winSize = Math.max(4, cfg.stabilityFrames + 2);
     this.reset();
   }
@@ -51,17 +56,18 @@ export class TemporalDecoder implements Decoder {
     this.window = [];
     this.stabilityCount = 0;
     this.lastMajority = null;
+    this.majoritySinceMs = null;
     this.nullCount = 0;
     this.tracking = "searching";
     this.tentative = null;
     this.tentativeConfidence = 0;
     this.settledCount = 0;
+    this.tentativeSinceMs = null;
     this.pending = [];
     this.awaitingChange = null;
   }
 
   push(pred: LetterPrediction | null, nowMs: number): DecoderState {
-    void nowMs;
     const valid =
       pred !== null &&
       pred.letter.length === 1 &&
@@ -75,17 +81,23 @@ export class TemporalDecoder implements Decoder {
         this.window = [];
         this.stabilityCount = 0;
         this.lastMajority = null;
+        this.majoritySinceMs = null;
         this.tentative = null;
         this.tentativeConfidence = 0;
         this.settledCount = 0;
+        this.tentativeSinceMs = null;
       } else if (this.nullCount >= DECAY_AFTER) {
-        // brief gap: hand moving between signs — drop tentative so no stray
-        // letters get committed, but keep window aging out
+        // Brief release during a transition: clear the old pose's vote history
+        // so it cannot make the next letter appear stable too early.
         this.tentative = null;
         this.tentativeConfidence = 0;
         this.settledCount = 0;
+        this.tentativeSinceMs = null;
         this.awaitingChange = null; // a gap allows re-signing the same letter
-        if (this.window.length) this.window.shift();
+        this.window = [];
+        this.stabilityCount = 0;
+        this.lastMajority = null;
+        this.majoritySinceMs = null;
       }
       return this.getState();
     }
@@ -119,11 +131,22 @@ export class TemporalDecoder implements Decoder {
     } else {
       this.stabilityCount = 1;
       this.lastMajority = bestLetter;
+      this.majoritySinceMs = nowMs;
     }
+
+    // Interpret the stability slider in 30 fps equivalents. A slower CPU
+    // fallback camera now needs elapsed steady time, not the same raw frame
+    // count at a much lower capture rate.
+    const minimumObservations = Math.min(3, this.cfg.stabilityFrames);
+    const stableForMs = (this.cfg.stabilityFrames - 1) * (1000 / 30);
+    const stabilityReached =
+      this.stabilityCount >= minimumObservations &&
+      this.majoritySinceMs !== null &&
+      nowMs - this.majoritySinceMs >= stableForMs;
 
     if (
       bestLetter !== null &&
-      this.stabilityCount >= this.cfg.stabilityFrames &&
+      stabilityReached &&
       bestAvg >= this.cfg.minConfidence &&
       bestN * 2 > this.window.length && // strict majority (no flicker ties)
       bestLetter !== this.awaitingChange
@@ -133,22 +156,30 @@ export class TemporalDecoder implements Decoder {
       } else {
         this.tentative = bestLetter;
         this.settledCount = 1;
+        this.tentativeSinceMs = nowMs;
       }
       this.tentativeConfidence = bestAvg;
-      if (this.cfg.autoCommit && this.settledCount >= this.cfg.autoCommitFrames) {
+      const holdComplete = this.autoCommitFramesExplicit
+        ? this.settledCount >= this.cfg.autoCommitFrames
+        : this.settledCount >= this.cfg.autoCommitFrames ||
+          (this.tentativeSinceMs !== null && nowMs - this.tentativeSinceMs >= this.cfg.autoCommitMs);
+      if (this.cfg.autoCommit && holdComplete) {
         this.pending.push(this.tentative);
         // hold-gate: this letter cannot re-arm until the signal changes
         this.awaitingChange = this.tentative;
         this.tentative = null;
         this.settledCount = 0;
+        this.tentativeSinceMs = null;
         this.stabilityCount = 0;
         this.window = [];
         this.lastMajority = null;
+        this.majoritySinceMs = null;
       }
     } else {
       this.tentative = null;
       this.tentativeConfidence = 0;
       this.settledCount = 0;
+      this.tentativeSinceMs = null;
     }
 
     return this.getState();
@@ -163,9 +194,11 @@ export class TemporalDecoder implements Decoder {
     this.tentative = null;
     this.tentativeConfidence = 0;
     this.settledCount = 0;
+    this.tentativeSinceMs = null;
     this.stabilityCount = 0;
     this.window = [];
     this.lastMajority = null;
+    this.majoritySinceMs = null;
     return letter;
   }
 

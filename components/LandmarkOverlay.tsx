@@ -28,9 +28,6 @@ export default function LandmarkOverlay({
     if (!c) return;
     const ctx = c.getContext("2d");
     if (!ctx) return;
-    const video = c.parentElement?.querySelector("video");
-    const videoWidth = video?.videoWidth ?? 0;
-    const videoHeight = video?.videoHeight ?? 0;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = c.clientWidth,
       h = c.clientHeight;
@@ -42,24 +39,13 @@ export default function LandmarkOverlay({
     ctx.clearRect(0, 0, w, h);
     if (!landmarks || landmarks.length < 21) return;
 
-    // The preview uses object-fit: cover. Match its crop so the skeleton stays
-    // on the fingers instead of drifting whenever the camera aspect ratio is
-    // different from the preview box.
-    const sourceAspect = videoWidth && videoHeight ? videoWidth / videoHeight : w / h;
-    const canvasAspect = w / h;
-    const sourceW = sourceAspect > canvasAspect ? h * sourceAspect : w;
-    const sourceH = sourceAspect > canvasAspect ? h : w / sourceAspect;
-    const cropX = (w - sourceW) / 2;
-    const cropY = (h - sourceH) / 2;
     const px = (l: Landmark) => {
       const x = mirrored ? 1 - l.x : l.x;
-      return [cropX + x * sourceW, cropY + l.y * sourceH] as const;
+      return [x * w, l.y * h] as const;
     };
 
-    ctx.shadowColor = "rgba(79, 156, 255, 0.45)";
-    ctx.shadowBlur = 8;
-    ctx.strokeStyle = "rgba(113, 183, 255, 0.92)";
-    ctx.lineWidth = Math.max(1.6, Math.min(2.5, w / 220));
+    ctx.strokeStyle = "rgba(79, 156, 255, 0.9)";
+    ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     for (const [a, b] of CONNECTIONS) {
       const [ax, ay] = px(landmarks[a]);
@@ -69,13 +55,11 @@ export default function LandmarkOverlay({
       ctx.lineTo(bx, by);
       ctx.stroke();
     }
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "#e8f4ff";
-    for (let i = 0; i < landmarks.length; i++) {
-      const l = landmarks[i];
+    for (const l of landmarks) {
       const [x, y] = px(l);
       ctx.beginPath();
-      ctx.arc(x, y, i === 0 || [4, 8, 12, 16, 20].includes(i) ? 3.5 : 2.2, 0, Math.PI * 2);
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
       ctx.fill();
     }
     // wrist highlight

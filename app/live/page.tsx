@@ -372,6 +372,24 @@ export default function LivePage() {
               </span>
             )}
           </div>
+          {decoderState.tentative && (
+            <div className="signal-meter-wrap">
+              <div className="signal-meter-label">
+                <span>Model score</span>
+                <span>{Math.round(decoderState.tentativeConfidence * 100)}%</span>
+              </div>
+              <div
+                className="signal-meter"
+                role="progressbar"
+                aria-label="Relative model score, not calibrated accuracy"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(decoderState.tentativeConfidence * 100)}
+              >
+                <span style={{ width: `${decoderState.tentativeConfidence * 100}%` }} />
+              </div>
+            </div>
+          )}
           <button
             className="btn primary"
             style={{ width: "100%" }}

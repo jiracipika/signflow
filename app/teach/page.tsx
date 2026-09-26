@@ -161,9 +161,7 @@ export default function TeachPage() {
         <section>
           <div className="camera-wrap">
             <video ref={videoRef} playsInline muted autoPlay className={running ? "mirrored" : ""} />
-            {running && (
-              <LandmarkOverlay landmarks={landmarks} mirrored />
-            )}
+            {running && <LandmarkOverlay landmarks={landmarks} mirrored />}
             {!running && (
               <div className="camera-overlay">
                 <div className="perm-icon" aria-hidden="true">🤟</div>

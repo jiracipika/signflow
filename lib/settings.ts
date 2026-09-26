@@ -8,7 +8,7 @@ export type Settings = {
   dominantHand: "right" | "left";
   mirrorPreview: boolean;
   showLandmarks: boolean;
-  stabilityFrames: number; // decoder stability (frames), 3..12
+  stabilityFrames: number; // decoder stability (30 fps equivalents), 3..12
   minConfidence: number; // 0.3..0.8
   autoCommit: boolean;
   saveTranscripts: boolean;

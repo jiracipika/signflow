@@ -37,8 +37,6 @@ export function useHandTracking(
   const lastTsRef = useRef<number>(-1);
   const nextAllowedRef = useRef<number>(0);
   const [fps, setFps] = useState(0);
-  const fpsCountRef = useRef(0);
-  const fpsStartedAtRef = useRef(0);
   const targetFps = opts?.fps ?? 30;
 
   const stop = useCallback(() => {
@@ -47,8 +45,6 @@ export function useHandTracking(
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     lastTsRef.current = -1;
-    fpsCountRef.current = 0;
-    fpsStartedAtRef.current = 0;
     setStatus("idle");
     setFps(0);
   }, []);
@@ -77,12 +73,6 @@ export function useHandTracking(
       }
       nextAllowedRef.current = now + 1000 / targetFpsRef.current - 2;
       const res = lmk.detectForVideo(v, now);
-      fpsCountRef.current++;
-      if (now - fpsStartedAtRef.current >= 1000) {
-        setFps(Math.round((fpsCountRef.current * 1000) / (now - fpsStartedAtRef.current)));
-        fpsCountRef.current = 0;
-        fpsStartedAtRef.current = now;
-      }
       if (res.landmarks && res.landmarks.length > 0) {
         const handedness = res.handednesses?.[0]?.[0]?.categoryName;
         onFrameRef.current({
@@ -108,30 +98,23 @@ export function useHandTracking(
       setStatus("requesting");
       setError(null);
       try {
-        fpsCountRef.current = 0;
-        fpsStartedAtRef.current = performance.now();
-        nextAllowedRef.current = 0;
         // load model once
         if (!landmarkerRef.current) {
           setStatus("model-loading");
           const fileset = await FilesetResolver.forVisionTasks(
             "/mediapipe/wasm"
           );
-          const options = {
-            baseOptions: { modelAssetPath: "/mediapipe/hand_landmarker.task" },
-            runningMode: "VIDEO" as const,
-            numHands: 1,
-          };
-          try {
-            landmarkerRef.current = await HandLandmarker.createFromOptions(
-              fileset,
-              { ...options, baseOptions: { ...options.baseOptions, delegate: "GPU" } }
-            );
-          } catch {
-            // Some browsers expose WebGL but cannot create this task's GPU
-            // delegate. CPU inference is slower, but still keeps tracking usable.
-            landmarkerRef.current = await HandLandmarker.createFromOptions(fileset, options);
-          }
+          landmarkerRef.current = await HandLandmarker.createFromOptions(
+            fileset,
+            {
+              baseOptions: {
+                modelAssetPath: "/mediapipe/hand_landmarker.task",
+                delegate: "GPU",
+              },
+              runningMode: "VIDEO",
+              numHands: 1,
+            }
+          );
         }
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -151,13 +134,11 @@ export function useHandTracking(
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         const name = (e as { name?: string })?.name;
-        stop();
         if (msg.toLowerCase().includes("permission") || name === "NotAllowedError")
           setStatus("denied");
-        else {
-          setError(msg);
-          setStatus("error");
-        }
+        else setError(msg);
+        setStatus((s) => (s === "denied" ? s : "error"));
+        stop();
       }
     },
     [loop, stop]
