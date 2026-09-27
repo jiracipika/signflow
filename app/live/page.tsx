@@ -21,7 +21,7 @@ export default function LivePage() {
     tentativeConfidence: 0,
     tracking: "searching" as "searching" | "tracking" | "lost",
   });
-  const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
+  const landmarksRef = useRef<Landmark[] | null>(null);
   const [modelReady, setModelReady] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -86,6 +86,7 @@ export default function LivePage() {
 
   const onFrame = useCallback(
     (frame: import("@/lib/types").HandFrame | null) => {
+      landmarksRef.current = frame?.landmarks ?? null;
       const d = decoderRef.current;
       if (!d || !modelReady) return;
       const pred = frame ? predictLandmarks(frame.landmarks) : null;
@@ -121,7 +122,6 @@ export default function LivePage() {
       const now = performance.now();
       if (now - lastUiFrameAtRef.current >= 100) {
         lastUiFrameAtRef.current = now;
-        setLandmarks(frame ? frame.landmarks : null);
         setDecoderState((prev) => {
           if (
             prev.tentative === state.tentative &&
@@ -265,7 +265,8 @@ export default function LivePage() {
           />
           {running && settings.showLandmarks && (
             <LandmarkOverlay
-              landmarks={landmarks}
+              landmarks={null}
+              landmarksRef={landmarksRef}
               mirrored={facing === "user" && settings.mirrorPreview}
             />
           )}

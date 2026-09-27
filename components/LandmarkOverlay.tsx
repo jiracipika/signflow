@@ -16,9 +16,11 @@ const CONNECTIONS: [number, number][] = [
 
 export default function LandmarkOverlay({
   landmarks,
+  landmarksRef,
   mirrored,
 }: {
   landmarks: Landmark[] | null;
+  landmarksRef?: { current: Landmark[] | null };
   mirrored: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
@@ -39,7 +41,9 @@ export default function LandmarkOverlay({
     const step = (time: number) => {
       const dt = previousTime ? Math.min(64, time - previousTime) : 16;
       previousTime = time;
-      const target = targetRef.current;
+      // Live mode supplies a ref updated at inference cadence, so canvas
+      // animation can follow each camera sample without React state renders.
+      const target = landmarksRef ? landmarksRef.current : targetRef.current;
       if (target && target.length >= 21) {
         const current = smoothRef.current;
         if (!current || current.length !== target.length) {
@@ -115,7 +119,7 @@ export default function LandmarkOverlay({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [mirrored]);
+  }, [landmarksRef, mirrored]);
 
   return <canvas ref={ref} aria-hidden="true" />;
 }
