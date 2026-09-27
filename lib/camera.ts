@@ -18,6 +18,8 @@ export type CameraStatus =
 
 export type UseHandTrackingOptions = {
   onFrame: (frame: HandFrame | null) => void;
+  /** Anatomical hand the signer prefers to use. */
+  dominantHand?: "right" | "left";
   /** user preference: mirror preview (front camera default true) */
   mirrored?: boolean;
   /** prefer rear camera */
@@ -25,7 +27,7 @@ export type UseHandTrackingOptions = {
 };
 
 export function useHandTracking(
-  { onFrame }: UseHandTrackingOptions,
+  { onFrame, dominantHand = "right" }: UseHandTrackingOptions,
   opts?: { fps?: number }
 ) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -56,9 +58,11 @@ export function useHandTracking(
   // keep latest callbacks/params in refs so the rAF loop identity is stable
   const onFrameRef = useRef(onFrame);
   const targetFpsRef = useRef(targetFps);
+  const dominantHandRef = useRef(dominantHand);
   useEffect(() => {
     onFrameRef.current = onFrame;
     targetFpsRef.current = targetFps;
+    dominantHandRef.current = dominantHand;
   });
 
   const loopRef = useRef<() => void>(() => {});
@@ -84,10 +88,21 @@ export function useHandTracking(
         fpsStartedAtRef.current = now;
       }
       if (res.landmarks && res.landmarks.length > 0) {
-        const handedness = res.handednesses?.[0]?.[0]?.categoryName;
+        // MediaPipe assumes mirrored selfie input for handedness. Camera
+        // frames here are raw/unmirrored, so its Left/Right labels are swapped.
+        const categories = res.handednesses ?? [];
+        const desiredCategory = dominantHandRef.current === "right" ? "Left" : "Right";
+        const selectedIndex = categories.findIndex(
+          (categoriesForHand) => categoriesForHand[0]?.categoryName === desiredCategory
+        );
+        const handIndex = selectedIndex >= 0 ? selectedIndex : 0;
+        const category = categories[handIndex]?.[0]?.categoryName;
+        const handedness = category
+          ? category === "Left" ? "Right" : "Left"
+          : dominantHandRef.current === "right" ? "Right" : "Left";
         onFrameRef.current({
-          landmarks: res.landmarks[0] as Landmark[],
-          handedness: handedness === "Left" ? "Left" : "Right",
+          landmarks: res.landmarks[handIndex] as Landmark[],
+          handedness,
           timestampMs: now,
         });
       } else {
@@ -120,7 +135,7 @@ export function useHandTracking(
           const options = {
             baseOptions: { modelAssetPath: "/mediapipe/hand_landmarker.task" },
             runningMode: "VIDEO" as const,
-            numHands: 1,
+            numHands: 2,
           };
           try {
             landmarkerRef.current = await HandLandmarker.createFromOptions(
