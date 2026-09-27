@@ -17,12 +17,14 @@ import {
 } from "@/lib/signs/custom-signs";
 import { untaughtLibraryWords } from "@/lib/signs/library";
 import type { Landmark } from "@/lib/types";
+import { useSettings } from "@/lib/settings";
 
 const STATIC_SAMPLES = 5;
 const DYNAMIC_SAMPLES = 5;
 const DYNAMIC_MS = 2500;
 
 export default function TeachPage() {
+  const [settings] = useSettings();
   const [signs, setSigns] = useState<SignLabel[]>([]);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<"static" | "dynamic">("static");
@@ -51,7 +53,10 @@ export default function TeachPage() {
     if (frame && collectingRef.current) bufRef.current.push(frame.landmarks);
   }, []);
 
-  const { videoRef, status, start, stop } = useHandTracking({ onFrame });
+  const { videoRef, status, start, stop } = useHandTracking({
+    onFrame,
+    dominantHand: settings.dominantHand,
+  });
   const running = status === "running";
 
   const captureSample = () => {

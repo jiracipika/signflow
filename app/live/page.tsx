@@ -140,7 +140,10 @@ export default function LivePage() {
     [modelReady]
   );
 
-  const { videoRef, status, error, start, stop, fps } = useHandTracking({ onFrame });
+  const { videoRef, status, error, start, stop, fps } = useHandTracking({
+    onFrame,
+    dominantHand: settings.dominantHand,
+  });
 
   const commitSign = () => {
     if (signMatch && signMatch.distance < 0.9) {

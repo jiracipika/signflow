@@ -5,7 +5,7 @@ export type Landmark = { x: number; y: number; z: number };
 
 export type HandFrame = {
   landmarks: Landmark[]; // 21 points, normalized [0..1] image coords
-  handedness: "Left" | "Right"; // MediaPipe label (image-space, NOT anatomical)
+  handedness: "Left" | "Right"; // Anatomical hand, corrected for unmirrored camera input
   timestampMs: number;
 };
 

@@ -151,7 +151,10 @@ export default function PracticePage() {
     [modelReady, mode]
   );
 
-  const { videoRef, status, start, stop } = useHandTracking({ onFrame });
+  const { videoRef, status, start, stop } = useHandTracking({
+    onFrame,
+    dominantHand: settings.dominantHand,
+  });
   const running = status === "running";
 
   const startCamera = () => {
