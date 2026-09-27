@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   sampleWord,
+  sampleDrillWord,
   scoreTypedWord,
   WORD_PRACTICE_POOL,
 } from "../lib/practice-words.ts";
@@ -59,4 +60,70 @@ test("scoreTypedWord scores per-letter, position-wise", () => {
   assert.equal(r2.total, 3);
   // case + junk chars are normalized away
   assert.equal(scoreTypedWord("CAT", " c-a-t! ").correct, 3);
+});
+
+// ---- P-drill: weak-letter weighted sampling -------------------------------
+
+test("sampleWord honors an injected rng (deterministic)", () => {
+  const pool = ["CAT", "DOG", "BIRD"];
+  let n = 0;
+  const rng = () => [0.0, 0.4, 0.8][n++ % 3];
+  const picks = new Set([sampleWord(pool, rng), sampleWord(pool, rng), sampleWord(pool, rng)]);
+  assert.ok(picks.size >= 1, "rng-driven picks produced nothing");
+});
+
+test("sampleDrillWord over-samples words containing weak letters", () => {
+  const pool = ["FAT", "DOG", "FAN", "BIRD", "CAT", "SUN"];
+  let n = 0;
+  const rng = () => {
+    n += 1;
+    return ((n * 2654435761) % 4294967296) / 4294967296;
+  };
+  const count = (fn: () => string) => {
+    let f = 0;
+    for (let i = 0; i < 600; i++) if (fn().includes("F")) f++;
+    return f;
+  };
+  const plain = count(() => sampleWord(pool, rng));
+  const drilled = count(() =>
+    sampleDrillWord({ pool, rng, weakLetters: ["F"] })
+  );
+  assert.ok(
+    drilled > plain * 1.5,
+    `weak weighting too weak: drilled ${drilled} vs plain ${plain}`
+  );
+});
+
+test("sampleDrillWord with no weak letters matches plain short-bias distribution", () => {
+  const pool = ["CAT", "DOG"];
+  let n = 0;
+  const rng = () => {
+    n += 1;
+    return ((n * 2654435761) % 4294967296) / 4294967296;
+  };
+  for (let i = 0; i < 100; i++) {
+    const a = sampleWord(pool, rng);
+    const b = sampleDrillWord({ pool, rng });
+    assert.ok(pool.includes(a) && pool.includes(b));
+  }
+});
+
+test("sampleDrillWord honors exclude + weakWeight override", () => {
+  const pool = ["FAT", "DOG"];
+  let n = 0;
+  const rng = () => {
+    n += 1;
+    return ((n * 2654435761) % 4294967296) / 4294967296;
+  };
+  for (let i = 0; i < 50; i++) {
+    const w = sampleDrillWord({ pool, rng, exclude: "FAT" });
+    assert.notEqual(w, "FAT", "excluded word sampled");
+  }
+  const weak10 = (() => {
+    let f = 0;
+    for (let i = 0; i < 200; i++)
+      if (sampleDrillWord({ pool, rng, weakLetters: ["F"], weakWeight: 10 }).includes("F")) f++;
+    return f;
+  })();
+  assert.ok(weak10 > 100, `weight 10 should dominate (got ${weak10}/200)`);
 });

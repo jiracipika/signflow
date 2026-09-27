@@ -8,8 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import SignAvatar, { type Pose } from "@/components/SignAvatar";
 import { spellSequence, FRAME_MS, type SignSequence } from "@/lib/signs/avatar-engine";
 import { loadSigns } from "@/lib/signs/custom-signs";
-import { sampleWord, scoreTypedWord, type WordScore } from "@/lib/practice-words";
-import { recordRound, type PracticeStats } from "@/lib/practice-stats";
+import { sampleWord, sampleDrillWord, scoreTypedWord, type WordScore } from "@/lib/practice-words";
+import { loadStats, recordRound, weakestLetters, type PracticeStats } from "@/lib/practice-stats";
 
 type PosesFile = { poses: Record<string, { lm: number[] }> };
 
@@ -94,7 +94,14 @@ export default function WordPractice({
   const nextWord = useCallback(() => {
     setAnswer("");
     setResult(null);
-    const w = sampleWord(undefined, undefined, word || undefined);
+    // Weak-letter drill: once there are 10+ letter attempts on record,
+    // bias word selection toward the letters the user misses most.
+    const stats = loadStats();
+    const attempts = Object.values(stats.letters).reduce((s, l) => s + l.attempts, 0);
+    const weak = attempts >= 10 ? weakestLetters(stats, 3) : [];
+    const w = weak.length > 0
+      ? sampleDrillWord({ exclude: word || undefined, weakLetters: weak })
+      : sampleWord(undefined, undefined, word || undefined);
     setWord(w);
     // defer so state settles before playback
     setTimeout(() => playWord(w), 0);

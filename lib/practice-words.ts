@@ -16,18 +16,52 @@ export const WORD_PRACTICE_POOL: string[] = COMMON_WORDS.filter(
  * are what a beginner can realistically read back; longer words appear as
  * occasional stretch rounds.
  */
-export function sampleWord(pool?: string[], _rng?: () => number, exclude?: string): string {
+export function sampleWord(pool?: string[], rng?: () => number, exclude?: string): string {
   const p = pool ?? WORD_PRACTICE_POOL;
   const candidates = exclude ? p.filter((w) => w !== exclude) : p;
   const src = candidates.length > 0 ? candidates : p;
-  // weighted pick without precomputing a full weight table
-  const total = src.reduce((s, w) => s + 1 / w.length, 0);
-  let r = Math.random() * total;
+  return weightedPick(src, rng ?? Math.random, (w) => 1 / w.length);
+}
+
+/** Weighted pick without precomputing a full weight table. */
+function weightedPick(src: string[], rng: () => number, weightOf: (w: string) => number): string {
+  const total = src.reduce((s, w) => s + weightOf(w), 0);
+  let r = rng() * total;
   for (const w of src) {
-    r -= 1 / w.length;
+    r -= weightOf(w);
     if (r <= 0) return w;
   }
   return src[src.length - 1];
+}
+
+export interface DrillOptions {
+  pool?: string[];
+  rng?: () => number;
+  exclude?: string;
+  /** Weak letters (from practice-stats weakestLetters) — words containing
+   *  any of them are sampled WEAK_WEIGHT× more often. */
+  weakLetters?: string[];
+  weakWeight?: number;
+}
+
+/** Drill sampling: short-word bias as usual, but words containing a weak
+ *  letter are boosted so practice concentrates where the user struggles.
+ *  Weak set empty/absent -> identical distribution to sampleWord. */
+export function sampleDrillWord(opts: DrillOptions = {}): string {
+  const p = opts.pool ?? WORD_PRACTICE_POOL;
+  const candidates = opts.exclude ? p.filter((w) => w !== opts.exclude) : p;
+  const src = candidates.length > 0 ? candidates : p;
+  const weak = new Set((opts.weakLetters ?? []).map((l) => l.toUpperCase()));
+  const mult = opts.weakWeight ?? 3;
+  const weightOf = (w: string): number => {
+    const base = 1 / w.length;
+    if (weak.size === 0) return base;
+    for (const ch of w) {
+      if (weak.has(ch)) return base * mult;
+    }
+    return base;
+  };
+  return weightedPick(src, opts.rng ?? Math.random, weightOf);
 }
 
 export type LetterHit = { letter: string; hit: boolean };
