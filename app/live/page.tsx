@@ -14,7 +14,7 @@ import { listSigns } from "@/lib/signs/custom-signs";
 import type { Landmark } from "@/lib/types";
 
 export default function LivePage() {
-  const [settings] = useSettings();
+  const [settings, updateSettings] = useSettings();
   const [transcript, setTranscript] = useState<Transcript>(() => createTranscript());
   const [decoderState, setDecoderState] = useState({
     tentative: null as string | null,
@@ -26,6 +26,8 @@ export default function LivePage() {
   const [modelError, setModelError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
+  const editingRef = useRef(false);
+  const [notice, setNotice] = useState("");
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [ttsSupported, setTtsSupported] = useState(false);
   const [signMatch, setSignMatch] = useState<{ label: string; distance: number } | null>(null);
@@ -88,7 +90,12 @@ export default function LivePage() {
     (frame: import("@/lib/types").HandFrame | null) => {
       landmarksRef.current = frame?.landmarks ?? null;
       const d = decoderRef.current;
-      if (!d || !modelReady) return;
+      if (!d || !modelReady || editingRef.current) return;
+      if (recordingMotionRef.current) {
+        if (frame) motionBufRef.current.push(frame.landmarks);
+        d.reset();
+        return;
+      }
       const pred = frame ? predictLandmarks(frame.landmarks) : null;
       const state = d.push(pred, frame?.timestampMs ?? performance.now());
       if (pred) {
@@ -101,14 +108,13 @@ export default function LivePage() {
       }
 
       if (frame) {
-        // collect motion buffer while recording (ref, not state — avoids re-render per frame)
-        if (recordingMotionRef.current) motionBufRef.current.push(frame.landmarks);
         // static word-sign check every 5th frame (cheap nearest-prototype)
         if (!recordingMotionRef.current && frameCountRef.current++ % 5 === 0) {
           const m = matchStatic(frame.landmarks);
           setSignMatch(m ? { label: m.label, distance: m.distance } : null);
         }
       }
+      if (!frame) setSignMatch(null);
       // auto-commit pending letters
       const pending = d.drainPending();
       if (pending.length) {
@@ -140,10 +146,22 @@ export default function LivePage() {
     [modelReady]
   );
 
-  const { videoRef, status, error, start, stop, fps } = useHandTracking({
+  const { videoRef, status, error, start, stop: stopTracking, fps } = useHandTracking({
     onFrame,
     dominantHand: settings.dominantHand,
   });
+
+  const stop = () => {
+    stopTracking();
+    decoderRef.current?.reset();
+    landmarksRef.current = null;
+    setDecoderState({ tentative: null, tentativeConfidence: 0, tracking: "searching" });
+    setTop3([]);
+    setSignMatch(null);
+    recordingMotionRef.current = false;
+    motionBufRef.current = [];
+    setRecordingMotion(false);
+  };
 
   const commitSign = () => {
     if (signMatch && signMatch.distance < 0.9) {
@@ -157,6 +175,9 @@ export default function LivePage() {
     motionBufRef.current = [];
     recordingMotionRef.current = true;
     setRecordingMotion(true);
+    decoderRef.current?.reset();
+    setDecoderState((state) => ({ ...state, tentative: null, tentativeConfidence: 0 }));
+    setTop3([]);
     setSignMatch(null);
   };
   const stopMotionRecording = () => {
@@ -177,7 +198,10 @@ export default function LivePage() {
   // Ctrl/Cmd+Z=undo
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (editing || (e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      const target = e.target instanceof Element ? e.target : null;
+      if (editing || e.repeat || target?.closest("input, textarea, select, button, a, [contenteditable='true']")) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() !== "z") return;
+      if (e.altKey || e.shiftKey) return;
       if (e.key === "Enter") {
         e.preventDefault();
         const d = decoderRef.current;
@@ -211,7 +235,7 @@ export default function LivePage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard denied — textarea select fallback visible in edit mode
+      setNotice("Copy was blocked. Use Edit text to select and copy your words.");
     }
   };
 
@@ -231,11 +255,14 @@ export default function LivePage() {
   };
 
   const running = status === "running";
+  const busy = status === "requesting" || status === "model-loading";
+  const wordCount = transcript.text.trim() ? transcript.text.trim().split(/\s+/).length : 0;
   const statusLabel =
     status === "idle" ? "Camera off"
     : status === "requesting" ? "Requesting camera…"
     : status === "denied" ? "Camera permission denied"
     : status === "model-loading" ? "Loading hand tracking…"
+    : status === "error" ? "Camera needs attention"
     : decoderState.tracking === "tracking" ? "Hand detected"
     : decoderState.tracking === "searching" ? "Looking for a hand…"
     : "Tracking lost — show your hand";
@@ -244,18 +271,29 @@ export default function LivePage() {
     <div className="live-workspace">
       <header className="workspace-heading">
         <div>
-          <span className="eyebrow">SIGNFLOW · LIVE WORKSPACE</span>
-          <h1>Spell in real time.</h1>
-          <p>Hold each ASL letter briefly. SignFlow follows your hand and builds the word as you go.</p>
+          <span className="eyebrow">YOUR PERSONAL SIGNING STUDIO</span>
+          <h1>A little motion.<br /><span>A lot to say.</span></h1>
+          <p>Turn your fingerspelling into words. Find your rhythm, shape a letter, and watch your message grow.</p>
         </div>
         <span className={`privacy-pill ${running ? "is-live" : ""}`}>
           <span /> {running ? "Camera stays on this device" : "Private, on-device recognition"}
         </span>
       </header>
+      <div className="studio-toolbar">
+        <div className="studio-mode" role="group" aria-label="Letter entry mode">
+          <button aria-pressed={settings.autoCommit} onClick={() => updateSettings({ autoCommit: true })}>Automatic</button>
+          <button aria-pressed={!settings.autoCommit} onClick={() => updateSettings({ autoCommit: false })}>Manual</button>
+        </div>
+        <span className="small muted">{settings.autoCommit ? "Steady letters add themselves" : "Review each letter, then add it"}</span>
+        <a className="studio-settings" href="/settings">Tune recognition ↗</a>
+      </div>
       <div className="live-layout">
       {/* left: camera + status */}
-      <section aria-label="Camera">
-        <div className="camera-wrap">
+      <section className="camera-column" aria-label="Camera">
+        <div className={`camera-wrap studio-camera ${running ? "is-running" : ""}`}>
+          <div className="camera-label"><span className={running ? "live-dot" : ""} />{running ? "LIVE CAMERA" : "CAMERA PREVIEW"}</div>
+          {running && <div className="camera-coach">{editing ? "Recognition paused while you edit" : decoderState.tracking === "tracking" ? "Hand in view · keep your movements natural" : "Bring your signing hand into the frame"}</div>}
+          {!running && <div className="camera-reticle" aria-hidden="true" /> }
           <video
             ref={videoRef}
             playsInline
@@ -274,30 +312,30 @@ export default function LivePage() {
             <div className="camera-overlay" role="status">
               {status === "denied" ? (
                 <>
-                  <div className="perm-icon" aria-hidden="true">🚫</div>
+                  <div className="perm-icon" aria-hidden="true">×</div>
                   <strong>Camera access denied</strong>
                   <p className="small muted" style={{ margin: 0 }}>
                     Allow camera access in your browser settings, then try again.
                     SignFlow never uploads video — processing happens on this device.
                   </p>
                 </>
-              ) : status === "model-loading" ? (
+              ) : busy ? (
                 <>
-                  <div className="perm-icon" aria-hidden="true">⏳</div>
-                  <strong>Loading on-device models…</strong>
+                  <div className="camera-spinner" aria-hidden="true" />
+                  <strong>{status === "requesting" ? "Waiting for camera access…" : "Preparing your studio…"}</strong>
                   <p className="small muted" style={{ margin: 0 }}>
                     First load downloads the hand tracker (a few MB), then it&apos;s cached.
                   </p>
                 </>
               ) : status === "error" ? (
                 <>
-                  <div className="perm-icon" aria-hidden="true">⚠️</div>
+                  <div className="perm-icon" aria-hidden="true">!</div>
                   <strong>Camera error</strong>
                   <p className="small muted" style={{ margin: 0 }}>{error}</p>
                 </>
               ) : (
                 <>
-                  <div className="perm-icon" aria-hidden="true">🤟</div>
+                  <svg className="studio-camera-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="5" y="13" width="38" height="28" rx="7"/><path d="m15 13 3-6h12l3 6"/><circle cx="24" cy="27" r="8"/><path d="M36 20h1"/></svg>
                   <strong>Camera is off</strong>
                   <p className="small muted" style={{ margin: 0 }}>
                     Video never leaves your device.
@@ -315,9 +353,9 @@ export default function LivePage() {
             <button
               className="btn primary"
               onClick={() => start(facing)}
-              disabled={!modelReady}
+              disabled={!modelReady || busy}
             >
-              Start camera
+              {busy ? "Connecting…" : "Start signing"}
             </button>
           )}
           <button className="btn" onClick={switchCamera} disabled={!running}>
@@ -345,6 +383,14 @@ export default function LivePage() {
           )}
         </div>
 
+        <details className="studio-help"><summary>Quick signing tips</summary>
+        <div className="studio-guide">
+          <div><span>01</span><strong>Frame your hand</strong><p>Keep your wrist and fingertips in view, with light in front of you.</p></div>
+          <div><span>02</span><strong>Find your rhythm</strong><p>Hold a letter briefly. Relax your hand between repeated letters.</p></div>
+          <div><span>03</span><strong>Make it yours</strong><p>Add spaces, choose a suggestion, or edit your message anytime.</p></div>
+        </div>
+        <div className="studio-tip"><span aria-hidden="true">✦</span><p>New to fingerspelling? <a href="/practice">Warm up in Practice ↗</a></p></div>
+        </details>
         {modelError && (
           <div className="card" role="alert">
             <strong>Recognition model failed to load.</strong>
@@ -355,9 +401,9 @@ export default function LivePage() {
       </section>
 
       {/* right: recognition + text */}
-      <section aria-label="Text">
+      <section className="studio-output" aria-label="Text">
         <div className="card">
-          <h2 style={{ fontSize: 16 }}>Recognized letter</h2>
+          <div className="panel-heading"><h2>Recognition</h2><span className="panel-tag">{settings.autoCommit ? "AUTO ADD" : "MANUAL ADD"}</span></div>
           <div className="tentative-letter">
             {decoderState.tentative ? (
               <>
@@ -365,9 +411,9 @@ export default function LivePage() {
                   {decoderState.tentative}
                 </span>
                 <span className="conf">
-                  {Math.round(decoderState.tentativeConfidence * 100)}% confidence
+                  Letter ready
                   <br />
-                  <span className="small muted">not calibrated — press Commit to add</span>
+                  <span className="small muted">{settings.autoCommit ? "Hold briefly to add" : "Tap Add letter below"}</span>
                 </span>
               </>
             ) : (
@@ -398,9 +444,9 @@ export default function LivePage() {
             className="btn primary"
             style={{ width: "100%" }}
             onClick={commitTentative}
-            disabled={!decoderState.tentative}
+            disabled={!running || !decoderState.tentative || editing}
           >
-            Commit letter
+            Add letter
           </button>
           {top3.length > 0 && (
             <div className="btn-row" style={{ marginTop: 6 }}>
@@ -421,14 +467,116 @@ export default function LivePage() {
             </div>
           )}
           <p className="small muted" style={{ marginTop: 8 }}>
-            Letters add themselves after a steady hold. For a double letter, release the
-            hand shape briefly before signing it again. Enter can commit the current letter early.
+            {settings.autoCommit ? "A steady hold adds a letter automatically." : "Press Add letter or Enter when the shape is ready."}
+            {" "}For a double letter, relax your hand briefly and sign it again.
           </p>
         </div>
 
+
+
+        <div className="card">
+          <div className="panel-heading"><h2>Your message</h2><span className="panel-tag">{wordCount} {wordCount === 1 ? "WORD" : "WORDS"}</span></div>
+          <div className="message-actions"><button className="btn" disabled={editing} onClick={() => {
+            editingRef.current = true;
+            decoderRef.current?.reset();
+            setEditing(true);
+          }}>Edit text</button><span className="small muted">{editing ? "Recognition is paused" : "Built one letter at a time"}</span></div>
+          <div className="transcript-box" aria-live="polite">
+            {editing ? (
+              <textarea
+                autoFocus
+                defaultValue={transcript.text}
+                onBlur={(e) => {
+                  apply({ type: "manual", text: e.target.value });
+                  decoderRef.current?.reset();
+                  editingRef.current = false;
+                  setEditing(false);
+                }}
+                maxLength={2000}
+                aria-label="Edit transcript"
+              />
+            ) : (
+              <span
+                onClick={() => { editingRef.current = true; decoderRef.current?.reset(); setEditing(true); }}
+                style={{ cursor: "text" }}
+                title="Tap to edit"
+              >
+                {transcript.text ? (
+                  <>
+                    {transcript.text.slice(0, transcript.text.lastIndexOf(" ") + 1)}
+                    <span className="current-word">{transcript.currentWord()}</span>
+                  </>
+                ) : (
+                  <span className="muted" style={{ fontSize: 16 }}>
+                    Your next conversation starts here. Sign a letter or choose Edit text.
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+
+          <div className="control-grid" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={() => apply({ type: "space" })}>Space</button>
+            <button className="btn" onClick={() => apply({ type: "delete" })} disabled={!transcript.text}>Delete</button>
+            <button className="btn" onClick={() => apply({ type: "undo" })} disabled={!transcript.canUndo}>Undo</button>
+            <button className="btn" onClick={() => apply({ type: "letter", letter: "J" })}>J</button>
+            <button className="btn" onClick={() => apply({ type: "letter", letter: "Z" })}>Z</button>
+            <button className="btn danger" onClick={() => apply({ type: "clear" })} disabled={!transcript.text}>Clear</button>
+          </div>
+
+          <div className="btn-row" style={{ marginTop: 10 }}>
+            <button className="btn" onClick={copyText} disabled={!transcript.text}>
+              {copied ? "Copied ✓" : "Copy"}
+            </button>
+            {ttsSupported && (
+              <button className="btn" onClick={speak} disabled={!transcript.text}>
+                Speak
+              </button>
+            )}
+            {settings.saveTranscripts && (
+              <button
+                className="btn"
+                onClick={() => {
+                  try { addTranscript(transcript.text); setNotice("Message saved on this device."); }
+                  catch { setNotice("This browser could not save the message. You can still copy it."); }
+                }}
+                disabled={!transcript.text}
+              >
+                Save
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="panel-heading"><h2>Finish your word</h2><span className="panel-tag">OPTIONAL</span></div>
+          <div className="suggestions">
+            {suggestions.length ? (
+              suggestions.map((w) => (
+                <button
+                  key={w}
+                  className="suggestion-btn"
+                  onClick={() => setTranscript((t) => t.acceptSuggestion(w))}
+                >
+                  {w.slice(0, transcript.currentWord().length)}
+                  <span className="sw">{w.slice(transcript.currentWord().length)}</span>
+                </button>
+              ))
+            ) : (
+              <span className="small muted">
+                {transcript.currentWord()
+                  ? "No dictionary match — your spelling is kept as-is."
+                  : "Suggestions appear as you commit letters."}
+              </span>
+            )}
+          </div>
+          <p className="small muted" style={{ marginBottom: 0 }}>
+            Suggestions are optional — tapping one replaces only the current word.
+          </p>
+        </div>
         {(hasSigns || recordingMotion) && (
-          <div className="card">
-            <h2 style={{ fontSize: 16 }}>Word signs</h2>
+          <details className="card word-signs">
+            <summary>Word signs <span className="small muted">Custom shapes &amp; motions</span></summary>
             {recordingMotion ? (
               <>
                 <p style={{ color: "var(--warn)" }}>● Recording motion…</p>
@@ -459,100 +607,11 @@ export default function LivePage() {
             <p className="small muted" style={{ marginBottom: 0 }}>
               Teach your own in <a href="/teach">Teach</a>.
             </p>
-          </div>
+          </details>
         )}
-
-        <div className="card">
-          <h2 style={{ fontSize: 16 }}>Text</h2>
-          <div className="transcript-box" aria-live="polite">
-            {editing ? (
-              <textarea
-                autoFocus
-                defaultValue={transcript.text}
-                onBlur={(e) => {
-                  setEditing(false);
-                  apply({ type: "manual", text: e.target.value });
-                }}
-                aria-label="Edit transcript"
-              />
-            ) : (
-              <span
-                onClick={() => setEditing(true)}
-                style={{ cursor: "text" }}
-                title="Tap to edit"
-              >
-                {transcript.text ? (
-                  <>
-                    {transcript.text.slice(0, transcript.text.lastIndexOf(" ") + 1)}
-                    <span className="current-word">{transcript.currentWord()}</span>
-                  </>
-                ) : (
-                  <span className="muted" style={{ fontSize: 16 }}>
-                    Committed letters appear here. Tap to edit manually.
-                  </span>
-                )}
-              </span>
-            )}
-          </div>
-
-          <div className="control-grid" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={() => apply({ type: "space" })}>Space</button>
-            <button className="btn" onClick={() => apply({ type: "delete" })}>Delete</button>
-            <button className="btn" onClick={() => apply({ type: "undo" })} disabled={!transcript.canUndo}>Undo</button>
-            <button className="btn" onClick={() => apply({ type: "letter", letter: "J" })}>J</button>
-            <button className="btn" onClick={() => apply({ type: "letter", letter: "Z" })}>Z</button>
-            <button className="btn danger" onClick={() => apply({ type: "clear" })}>Clear</button>
-          </div>
-
-          <div className="btn-row" style={{ marginTop: 10 }}>
-            <button className="btn" onClick={copyText} disabled={!transcript.text}>
-              {copied ? "Copied ✓" : "Copy"}
-            </button>
-            {ttsSupported && (
-              <button className="btn" onClick={speak} disabled={!transcript.text}>
-                Speak
-              </button>
-            )}
-            {settings.saveTranscripts && (
-              <button
-                className="btn"
-                onClick={() => addTranscript(transcript.text)}
-                disabled={!transcript.text}
-              >
-                Save
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="card">
-          <h2 style={{ fontSize: 16 }}>Suggestions</h2>
-          <div className="suggestions">
-            {suggestions.length ? (
-              suggestions.map((w) => (
-                <button
-                  key={w}
-                  className="suggestion-btn"
-                  onClick={() => setTranscript((t) => t.acceptSuggestion(w))}
-                >
-                  {w.slice(0, transcript.currentWord().length)}
-                  <span className="sw">{w.slice(transcript.currentWord().length)}</span>
-                </button>
-              ))
-            ) : (
-              <span className="small muted">
-                {transcript.currentWord()
-                  ? "No dictionary match — your spelling is kept as-is."
-                  : "Suggestions appear as you commit letters."}
-              </span>
-            )}
-          </div>
-          <p className="small muted" style={{ marginBottom: 0 }}>
-            Suggestions are optional — tapping one replaces only the current word.
-          </p>
-        </div>
       </section>
       </div>
+      {notice && <p className="studio-notice" role="status">{notice}</p>}
     </div>
   );
 }

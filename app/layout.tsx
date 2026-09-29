@@ -1,23 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
+import Navigation from "@/components/Navigation";
 import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
-  variable: "--font-display",
+  variable: "--font-display-brico",
   display: "swap",
 });
 
 const body = Geist({
   subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-body-geist",
   display: "swap",
 });
 
 const mono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  variable: "--font-mono-geist",
   display: "swap",
 });
 
@@ -40,17 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body>
-        <nav className="topnav">
-          <Link className="brand" href="/">
-            <span aria-hidden="true">🤟</span> SignFlow
-          </Link>
-          <a href="/live">Sign</a>
-          <a href="/practice">Practice</a>
-          <a href="/library">Library</a>
-          <a href="/teach">Teach</a>
-          <a href="/avatar">Avatar</a>
-          <a href="/settings">Settings</a>
-        </nav>
+        <Navigation />
         <main className="container">{children}</main>
       </body>
     </html>

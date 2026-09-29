@@ -42,8 +42,12 @@ export function useHandTracking(
   const fpsCountRef = useRef(0);
   const fpsStartedAtRef = useRef(0);
   const targetFps = opts?.fps ?? 30;
+  const requestRef = useRef(0);
+  const startingRef = useRef(false);
 
   const stop = useCallback(() => {
+    requestRef.current++;
+    startingRef.current = false;
     cancelAnimationFrame(rafRef.current);
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -68,6 +72,7 @@ export function useHandTracking(
   const loopRef = useRef<() => void>(() => {});
   useEffect(() => {
     const step = () => {
+      if (!streamRef.current) return;
       const v = videoRef.current;
       const lmk = landmarkerRef.current;
       if (!v || !lmk || v.readyState < 2) {
@@ -75,11 +80,12 @@ export function useHandTracking(
         return;
       }
       const now = performance.now();
-      if (now < nextAllowedRef.current) {
+      if (now < nextAllowedRef.current || v.currentTime === lastTsRef.current) {
         rafRef.current = requestAnimationFrame(step);
         return;
       }
       nextAllowedRef.current = now + 1000 / targetFpsRef.current - 2;
+      lastTsRef.current = v.currentTime;
       const res = lmk.detectForVideo(v, now);
       fpsCountRef.current++;
       if (now - fpsStartedAtRef.current >= 1000) {
@@ -120,6 +126,10 @@ export function useHandTracking(
 
   const start = useCallback(
     async (facingMode: "user" | "environment" = "user") => {
+      if (startingRef.current || streamRef.current) return;
+      startingRef.current = true;
+      const request = ++requestRef.current;
+      const isCurrent = () => request === requestRef.current;
       setStatus("requesting");
       setError(null);
       try {
@@ -137,17 +147,22 @@ export function useHandTracking(
             runningMode: "VIDEO" as const,
             numHands: 2,
           };
+          let task: HandLandmarker;
           try {
-            landmarkerRef.current = await HandLandmarker.createFromOptions(
+            task = await HandLandmarker.createFromOptions(
               fileset,
               { ...options, baseOptions: { ...options.baseOptions, delegate: "GPU" } }
             );
           } catch {
             // Some browsers expose WebGL but cannot create this task's GPU
             // delegate. CPU inference is slower, but still keeps tracking usable.
-            landmarkerRef.current = await HandLandmarker.createFromOptions(fileset, options);
+            task = await HandLandmarker.createFromOptions(fileset, options);
           }
+          if (!isCurrent()) { task.close(); return; }
+          landmarkerRef.current = task;
         }
+        if (!isCurrent()) return;
+        setStatus("requesting");
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode,
@@ -155,15 +170,21 @@ export function useHandTracking(
             frameRate: 30,
           },
           audio: false,
-});
+        });
+        if (!isCurrent()) { stream.getTracks().forEach((track) => track.stop()); return; }
         streamRef.current = stream;
         const v = videoRef.current;
         if (!v) throw new Error("Video element missing");
         v.srcObject = stream;
         await v.play();
+        if (!isCurrent()) return;
+        startingRef.current = false;
+        fpsCountRef.current = 0;
+        fpsStartedAtRef.current = performance.now();
         setStatus("running");
         rafRef.current = requestAnimationFrame(loop);
       } catch (e) {
+        if (!isCurrent()) return;
         const msg = e instanceof Error ? e.message : String(e);
         const name = (e as { name?: string })?.name;
         stop();
@@ -179,12 +200,15 @@ export function useHandTracking(
   );
 
   useEffect(() => {
-    const stream = streamRef.current;
-    const lmk = landmarkerRef.current;
+    const requests = requestRef;
     return () => {
+      requests.current++;
+      startingRef.current = false;
       cancelAnimationFrame(rafRef.current);
-      stream?.getTracks().forEach((t) => t.stop());
-      lmk?.close?.();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      landmarkerRef.current?.close();
+      landmarkerRef.current = null;
     };
   }, []);
 
