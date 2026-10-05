@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeFrame, resampleSequence } from "../lib/signs/normalize.ts";
 import { dtwDistance } from "../lib/signs/dtw.ts";
-import type { Landmark } from "../lib/types.ts";
 
 const lm = (arr: [number, number, number][]) =>
   arr.map(([x, y, z]) => ({ x, y, z }));

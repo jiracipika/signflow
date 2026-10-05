@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party assets: MediaPipe WASM glue is copied verbatim from
+    // node_modules by scripts/copy-mediapipe.mjs (in-file disables would be
+    // overwritten), models are data. Not lintable first-party code.
+    "public/**",
   ]),
 ]);
 
