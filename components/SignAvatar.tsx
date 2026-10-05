@@ -5,6 +5,7 @@
 // interpolation, motion trails for J/Z tracing, and playback loop.
 
 import { useEffect, useRef } from "react";
+import { FRAME_MS } from "@/lib/signs/avatar-engine";
 
 export type Pose = { x: number; y: number; z: number };
 
@@ -183,8 +184,7 @@ export default function SignAvatar({
 
       const m = motionRef.current;
       if (m && m.length > 0) {
-        const holdMs = 45;
-        if (!pausedRef.current) motionIdxRef.current += dt / holdMs;
+        if (!pausedRef.current) motionIdxRef.current += dt / FRAME_MS;
         const i = Math.floor(motionIdxRef.current) % m.length;
         if (onFrameIdxRef.current) onFrameIdxRef.current(i);
         const cur = poseRef.current;

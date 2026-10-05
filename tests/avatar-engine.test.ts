@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spellSequence, FRAME_MS } from "../lib/signs/avatar-engine.ts";
+import { spellSequence, sequenceComplete, FRAME_MS } from "../lib/signs/avatar-engine.ts";
 
 function poses(letters: string[]): Record<string, { x: number; y: number; z: number }[]> {
   const out: Record<string, { x: number; y: number; z: number }[]> = {};
@@ -101,4 +101,39 @@ test("strip invalid characters, handle spaces and empty", () => {
   const empty = spellSequence("123", P);
   assert.equal(empty.frames.length, 0);
   assert.equal(empty.spans.length, 0);
+});
+
+// ---- playback completion (used by the avatar sign player) ------------------
+
+test("sequence completes at the last frame, not before", () => {
+  const s = spellSequence("AB", P);
+  const n = s.frames.length;
+  assert.equal(sequenceComplete(0, n, false), false);
+  assert.equal(sequenceComplete(n - 2, n, false), false);
+  assert.equal(sequenceComplete(n - 1, n, false), true);
+  assert.equal(sequenceComplete(n, n, false), true, "index past end still completes");
+});
+
+test("loop mode and empty sequences never complete", () => {
+  const n = spellSequence("AB", P).frames.length;
+  assert.equal(sequenceComplete(n - 1, n, true), false, "loop wraps, never finishes");
+  assert.equal(sequenceComplete(0, 0, false), false, "nothing to play");
+});
+
+test("pacing lives in the frame count, not a separate clock", () => {
+  // SignAvatar ticks exactly one frame per FRAME_MS, so playback duration is
+  // frames.length * FRAME_MS — the sign player keys completion off the frame
+  // index and must never rescale by a speed factor twice (regression: the old
+  // completion timer divided by speed again, cutting fast playback short and
+  // over-looping slow playback).
+  const slow = spellSequence("HI", P, { holdMs: 700, gapMs: 620 });
+  const fast = spellSequence("HI", P, { holdMs: 350, gapMs: 310 });
+  assert.ok(fast.frames.length < slow.frames.length, "speed shrinks frame count");
+  assert.ok(
+    fast.frames.length * FRAME_MS < slow.frames.length * FRAME_MS,
+    "duration is derivable from frames.length alone"
+  );
+  const slowHold = slow.spans[0].end - slow.spans[0].start;
+  const fastHold = fast.spans[0].end - fast.spans[0].start;
+  assert.ok(fastHold < slowHold, "per-letter span shrinks with holdMs");
 });

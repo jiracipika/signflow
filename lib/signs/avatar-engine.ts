@@ -10,6 +10,22 @@ import type { Pose } from "@/components/SignAvatar";
 
 export const FRAME_MS = 45; // playback tick used by SignAvatar motion loop
 
+/**
+ * Playback-completion rule for the avatar sign player. SignAvatar advances
+ * exactly one frame per FRAME_MS (pausing freezes the index, looping wraps it
+ * modulo the frame count), so a sequence is complete when the reported frame
+ * index reaches its last frame — unless looping, which never completes.
+ * Sequence pacing (speed slider, hold/gap times) is baked into the frame
+ * count by spellSequence, so no wall-clock math belongs here.
+ */
+export function sequenceComplete(
+  frameIdx: number,
+  frameCount: number,
+  loop: boolean
+): boolean {
+  return !loop && frameCount > 0 && frameIdx >= frameCount - 1;
+}
+
 export type LetterSpan = { letter: string; start: number; end: number };
 export type WordSpan = { text: string; start: number; end: number };
 export type SignSequence = {

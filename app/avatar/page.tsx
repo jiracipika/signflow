@@ -9,7 +9,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SignAvatar from "@/components/SignAvatar";
 import type { Pose } from "@/components/SignAvatar";
-import { spellSequence, FRAME_MS, type SignSequence } from "@/lib/signs/avatar-engine";
+import {
+  spellSequence,
+  sequenceComplete,
+  type SignSequence,
+} from "@/lib/signs/avatar-engine";
 import { loadSigns } from "@/lib/signs/custom-signs";
 
 type PosesFile = { poses: Record<string, { lm: number[]; spread: number; samples: number }> };
@@ -31,10 +35,7 @@ export default function AvatarPage() {
   const [frameIdx, setFrameIdx] = useState(0);
   const [seq, setSeq] = useState<SignSequence | null>(null);
 
-  const motionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pausedRef = useRef(false);
   const loopRef = useRef(false);
-  useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { loopRef.current = loop; }, [loop]);
 
   useEffect(() => {
@@ -94,19 +95,15 @@ export default function AvatarPage() {
     }));
   }, [poses]);
 
-  const clearMotionTimer = () => {
-    if (motionTimerRef.current) clearTimeout(motionTimerRef.current);
-    motionTimerRef.current = null;
-  };
-
-  const armCompletion = useCallback((frames: number) => {
-    clearMotionTimer();
-    motionTimerRef.current = setTimeout(() => {
-      // in loop mode SignAvatar wraps around on its own; never idle out
-      if (!loopRef.current) setPlaying("idle");
-      else motionTimerRef.current = null;
-    }, (frames * FRAME_MS + 400) / speed);
-  }, [speed]);
+  // Playback completion follows the frame index SignAvatar reports instead of
+  // a wall-clock timer: frames advance one per FRAME_MS with speed already
+  // baked into the frame count, pausing freezes the index (so a paused player
+  // never completes), and loop mode wraps instead of finishing.
+  useEffect(() => {
+    if (!seq || playing === "idle") return;
+    if (sequenceComplete(frameIdx, seq.frames.length, loopRef.current))
+      setPlaying("idle");
+  }, [frameIdx, playing, seq]);
 
   const play = useCallback((input?: string) => {
     const clean = (input ?? text).toUpperCase().replace(/[^A-Z ]/g, "").trim();
@@ -122,15 +119,13 @@ export default function AvatarPage() {
       setCaption(motionKey);
       setPlaying("motion");
       setSeq({ frames, caption: motionKey, spans: [], words: [] });
-      armCompletion(frames.length);
     } else {
       const s = spellSequence(clean, poses, { holdMs: 700 / spd, gapMs: 620 / spd });
       setCaption(s.caption);
       setSeq(s);
       setPlaying("letters");
-      armCompletion(s.frames.length);
     }
-  }, [text, poses, speed, motionSigns, armCompletion]);
+  }, [text, poses, speed, motionSigns]);
 
   // ?text= deep link autoplays once poses are ready
   const autoplayRef = useRef(false);
@@ -148,12 +143,7 @@ export default function AvatarPage() {
     }
   }, [poses, play]);
 
-  useEffect(() => {
-    return () => clearMotionTimer();
-  }, []);
-
   const stop = () => {
-    clearMotionTimer();
     setPlaying("idle");
     setPaused(false);
     setFrameIdx(0);
@@ -171,7 +161,6 @@ export default function AvatarPage() {
     setFrameIdx(0);
     setPlaying("letters");
     setPaused(false);
-    armCompletion(slice.length);
   };
 
   return (
