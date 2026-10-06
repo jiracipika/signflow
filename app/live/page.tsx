@@ -11,6 +11,8 @@ import LandmarkOverlay from "@/components/LandmarkOverlay";
 import { useSettings, addTranscript } from "@/lib/settings";
 import { matchStatic, matchDynamic } from "@/lib/signs/custom-signs";
 import { listSigns } from "@/lib/signs/custom-signs";
+import { MotionLetterWatcher } from "@/lib/signs/motion-letters";
+import { mirrorLandmarks } from "@/lib/features";
 import type { Landmark } from "@/lib/types";
 
 export default function LivePage() {
@@ -36,6 +38,7 @@ export default function LivePage() {
   const motionBufRef = useRef<Landmark[][]>([]);
   const [hasSigns, setHasSigns] = useState(false);
   const lastUiFrameAtRef = useRef(0);
+  const motionWatcherRef = useRef<MotionLetterWatcher>(new MotionLetterWatcher());
 
   const top3Ref = useRef<[string, number][]>([]);
   const [top3, setTop3] = useState<[string, number][]>([]);
@@ -80,6 +83,7 @@ export default function LivePage() {
       minConfidence: settings.minConfidence,
       autoCommit: settings.autoCommit,
     });
+    motionWatcherRef.current.reset();
   }, [settings.stabilityFrames, settings.minConfidence, settings.autoCommit]);
 
   const apply = useCallback((action: TranscriptAction) => {
@@ -91,12 +95,35 @@ export default function LivePage() {
       landmarksRef.current = frame?.landmarks ?? null;
       const d = decoderRef.current;
       if (!d || !modelReady || editingRef.current) return;
+      // Left-handed signers: mirror the recognition input onto the right-hand
+      // geometry the model (and the built-in sign templates) were trained on.
+      // The overlay keeps the raw landmarks so the skeleton tracks the real
+      // hand on screen.
+      const lmRec =
+        frame && frame.handedness === "Left"
+          ? mirrorLandmarks(frame.landmarks)
+          : frame?.landmarks;
       if (recordingMotionRef.current) {
-        if (frame) motionBufRef.current.push(frame.landmarks);
+        if (frame) motionBufRef.current.push(lmRec ?? frame.landmarks);
         d.reset();
         return;
       }
-      const pred = frame ? predictLandmarks(frame.landmarks) : null;
+      // movement letters first: a finished J/Z trace commits directly (like
+      // the manual J/Z buttons) and resets the decoder so the post-trace pose
+      // cannot also fire a stale letter
+      if (lmRec && frame) {
+        const ml = motionWatcherRef.current.feed(lmRec, frame.timestampMs);
+        if (ml) {
+          apply({ type: "letter", letter: ml });
+          d.reset();
+          top3Ref.current = [];
+          setSignMatch(null);
+          return;
+        }
+      } else {
+        motionWatcherRef.current.lost();
+      }
+      const pred = lmRec ? predictLandmarks(lmRec) : null;
       const state = d.push(pred, frame?.timestampMs ?? performance.now());
       if (pred) {
         top3Ref.current = Object.entries(pred.probabilities)
@@ -107,10 +134,10 @@ export default function LivePage() {
         top3Ref.current = [];
       }
 
-      if (frame) {
+      if (lmRec) {
         // static word-sign check every 5th frame (cheap nearest-prototype)
         if (!recordingMotionRef.current && frameCountRef.current++ % 5 === 0) {
-          const m = matchStatic(frame.landmarks);
+          const m = matchStatic(lmRec);
           setSignMatch(m ? { label: m.label, distance: m.distance } : null);
         }
       }
@@ -143,7 +170,7 @@ export default function LivePage() {
         setTop3([...top3Ref.current]);
       }
     },
-    [modelReady]
+    [modelReady, apply]
   );
 
   const { videoRef, status, error, start, stop: stopTracking, fps } = useHandTracking({
@@ -154,6 +181,7 @@ export default function LivePage() {
   const stop = () => {
     stopTracking();
     decoderRef.current?.reset();
+    motionWatcherRef.current.reset();
     landmarksRef.current = null;
     setDecoderState({ tentative: null, tentativeConfidence: 0, tracking: "searching" });
     setTop3([]);

@@ -46,9 +46,22 @@ function sub(
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
 
+/**
+ * Mirror an image-space hand horizontally (x -> 1-x, relative depth kept).
+ *
+ * The letter model (and every built-in sign template) is trained/authored on
+ * right-hand geometry. Left-handed signers produce horizontally flipped
+ * landmarks, so the recognition path mirrors their frames onto right-hand
+ * geometry first — same trick the augmented training uses, applied at runtime.
+ * The overlay keeps drawing the raw landmarks so the skeleton stays glued to
+ * the real hand on screen.
+ */
+export function mirrorLandmarks(lm: Landmark[]): Landmark[] {
+  return lm.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z }));
+}
+
 /** Returns the 86-dim feature vector for one hand's 21 landmarks. */
-export function engineerFeatures(lm: Landmark[]): Float64Array {
-  const f = new Float64Array(86);
+export function engineerFeatures(lm: Landmark[]): Float64Array {  const f = new Float64Array(86);
   let k = 0;
 
   // 1. raw landmarks (63)
