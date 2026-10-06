@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import Navigation from "@/components/Navigation";
 import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -40,6 +41,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body>
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4128325832827761"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
         <Navigation />
         <main className="container">{children}</main>
       </body>
