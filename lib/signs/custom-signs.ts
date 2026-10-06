@@ -155,7 +155,7 @@ export function loadSigns(): StoredSign[] {
   }
 }
 
-function saveCustom(signs: StoredSign[]) {
+export function saveCustom(signs: StoredSign[]) {
   window.localStorage.setItem(
     KEY,
     JSON.stringify(signs.filter((s) => !s.builtin))

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import {
   useSettings,
   loadTranscripts,
@@ -8,11 +8,19 @@ import {
   deleteAllTranscripts,
   type SavedTranscript,
 } from "@/lib/settings";
+import {
+  buildBackup,
+  backupToJson,
+  parseBackup,
+  importBackup,
+} from "@/lib/signs/backup";
 
 export default function SettingsPage() {
   const [settings, update] = useSettings();
   const [transcripts, setTranscripts] = useState<SavedTranscript[]>([]);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [taughtCount, setTaughtCount] = useState(0);
+  const [importResult, setImportResult] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,6 +33,65 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadTaughtCountSafe();
+    function loadTaughtCountSafe() {
+      if (cancelled) return;
+      setTaughtCount(buildBackup().signs.length);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleExport() {
+    const blob = new Blob([backupToJson()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `signflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImport(e: ChangeEvent<HTMLInputElement>) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = ""; // allow re-picking the same file
+    if (!file) return;
+    let raw: string;
+    try {
+      raw = await file.text();
+    } catch {
+      setImportResult("Could not read that file.");
+      return;
+    }
+    const parsed = parseBackup(raw);
+    if (!parsed.ok) {
+      setImportResult(`Could not read backup: ${parsed.error}.`);
+      return;
+    }
+    const report = importBackup(parsed.backup);
+    const parts: string[] = [];
+    if (report.imported.length > 0)
+      parts.push(`Imported ${report.imported.length}: ${report.imported.join(", ")}`);
+    if (report.skippedExisting.length > 0)
+      parts.push(
+        `Skipped ${report.skippedExisting.length} already taught here: ${report.skippedExisting.join(", ")}`
+      );
+    if (report.rejected.length > 0)
+      parts.push(
+        `Rejected ${report.rejected.length}: ${report.rejected
+          .map((r) => `${r.label} (${r.reason})`)
+          .join(", ")}`
+      );
+    setImportResult(parts.join(" · ") || "Nothing to import.");
+    setTaughtCount(buildBackup().signs.length);
+  }
 
   return (
     <>
@@ -254,6 +321,57 @@ export default function SettingsPage() {
           Settings and (if you opt in) transcripts are stored in this browser&apos;s
           localStorage only.
         </p>
+        <h3>Taught signs ({taughtCount})</h3>
+        <div className="setting-row">
+          <div>
+            <strong>Backup</strong>
+            <div className="desc">
+              Taught signs stay in this browser only — one cleared browser and
+              they are gone. Export them to a file, and import that file here or
+              on another device to restore them. Importing merges: signs you
+              already taught here are kept as they are. The file stays with you;
+              nothing is uploaded.
+            </div>
+            {importResult && (
+              <div className="desc" style={{ overflowWrap: "anywhere" }}>
+                {importResult}
+              </div>
+            )}
+          </div>
+          <div className="btn-row">
+            <button
+              className="btn"
+              disabled={taughtCount === 0}
+              onClick={handleExport}
+            >
+              Export my signs ({taughtCount})
+            </button>
+            <label
+              className="btn"
+              style={{ position: "relative", overflow: "hidden" }}
+            >
+              Import backup
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={handleImport}
+                aria-label="Import backup file"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  opacity: 0,
+                  cursor: "pointer",
+                }}
+              />
+            </label>
+          </div>
+        </div>
+        {taughtCount === 0 && (
+          <div className="desc">
+            Nothing to export yet — teach a sign first, then come back to back
+            it up.
+          </div>
+        )}
         <div className="btn-row">
           <button
             className="btn danger"
