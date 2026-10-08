@@ -44,16 +44,18 @@ for (let i = 0; i < 26; i++) {
   if (c !== "J" && c !== "Z") staticIdx.set(i, k++);
 }
 
+// X_test ships pre-standardized with the DATASET's mean/std (Siruyy), but the
+// exported model standardizes with its own raw-space training stats — so raw
+// features must be reconstructed with the dataset constants, not the model's
+const dmean = loadNpy("/tmp/signflow-data/mean.npy").data;
+const dstd = loadNpy("/tmp/signflow-data/std.npy").data;
+
 let correct = 0,
   total = 0;
 const confusion = {};
-const mean = m.mean,
-  std = m.std;
 for (let i = 0; i < X.shape[0]; i++) {
-  // X_test is already standardized; reconstruct raw features so that
-  // predictFeatures' internal (x-mean)/std round-trips correctly
   const feat = X.data.slice(i * 86, (i + 1) * 86).map(
-    (v, j) => v * std[j] + mean[j]
+    (v, j) => v * dstd[j] + dmean[j]
   );
   const yi = y.data[i];
   if (!staticIdx.has(yi)) continue;

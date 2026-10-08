@@ -253,7 +253,9 @@ def train():
     mir_acc = accuracy(model, st(mirrored(Xte)), yte)
     print(f"held-out acc: {acc:.4f} | mirrored-held-out acc: {mir_acc:.4f}")
 
-    probs = model.probs(Xte)
+    # st(): the network was trained on standardized features — evaluating the
+    # confusion on raw Xte would export a garbage cm/macro next to the real acc
+    probs = model.probs(st(Xte))
     cm = np.zeros((24, 24), dtype=int)
     for p, t in zip(probs.argmax(1), yte):
         cm[t, p] += 1

@@ -89,9 +89,10 @@ export default function Home() {
         <div className="card">
           <h2>What it recognizes</h2>
           <p>
-            <strong>24 static ASL alphabet letters</strong> (A–Z except motion-based J
-            and Z, which have manual buttons), plus single-shape word signs like
-            I LOVE YOU, YES, and NO — and <strong>anything you teach it</strong> on the
+            <strong>the full ASL alphabet</strong> — 24 static letters plus the
+            motion-based J and Z, recognized by tracing the fingertip path (manual
+            buttons remain as a fallback) — plus single-shape word signs like
+            I LOVE YOU, YES, and NO, and <strong>anything you teach it</strong> on the
             Teach page.
           </p>
           <p>
@@ -123,8 +124,9 @@ export default function Home() {
             Recognition depends on lighting, angle, and how closely your hand shapes
             match the training data (one contributor&apos;s hand). It works best for
             deliberate, paused fingerspelling — not continuous signing. Some letters
-            (M/N/T, I/Y) occasionally confuse. J and Z are motion-based and aren&apos;t
-            recognized automatically. Built-in word signs (I LOVE YOU, YES, NO) are
+            (M/N/T, I/Y) occasionally confuse. J and Z are traced as movements —
+            they need a deliberate finger path, so a sloppy or fast trace may miss
+            (manual buttons remain). Built-in word signs (I LOVE YOU, YES, NO) are
             approximate single hand shapes — the real signs add motion, so treat
             them as hints and learn from the library&apos;s references.
           </p>
