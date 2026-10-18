@@ -10,6 +10,15 @@ import type { Landmark } from "@/lib/types";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
 import SignAvatar, { type Pose } from "@/components/SignAvatar";
 import WordPractice from "@/components/WordPractice";
+import {
+  MotionConfig,
+  motion,
+  staggerContainer,
+  fadeUp,
+  fadeIn,
+  hoverLift,
+  tapPress,
+} from "@/components/motion-kit";
 
 const STATIC_LETTERS = "ABCDEFGHIKLMNOPQRSTUVWXY".split("");
 const PRACTICE_WORDS = ["HI", "OK", "CAT", "DOG", "YOU", "EAT", "BYE"];
@@ -233,8 +242,9 @@ export default function PracticePage() {
   };
 
   return (
-    <>
-      <div className="card">
+    <MotionConfig reducedMotion="user">
+      <motion.div variants={staggerContainer} initial="hidden" animate="show">
+        <motion.div variants={fadeUp} className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>Practice</h2>
           <div className="btn-row" style={{ margin: 0 }}>
@@ -286,40 +296,44 @@ export default function PracticePage() {
                 const state =
                   acc === null ? undefined : acc.acc >= 0.8 ? "done" : acc.acc < 0.5 ? "partial" : undefined;
                 return (
-                  <button
+                  <motion.button
                     key={L}
                     role="option"
                     aria-selected={mode.kind === "letter" && mode.target === L}
                     className="letter-cell"
                     data-state={mode.kind === "letter" && mode.target === L ? "partial" : state}
                     onClick={() => pickNew({ kind: "letter", target: L })}
+                    whileHover={hoverLift}
+                    whileTap={tapPress}
                   >
                     {L}
                     {acc !== null && <small>{Math.round(acc.acc * 100)}%</small>}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
             <div className="btn-row" style={{ marginTop: 12 }}>
               {PRACTICE_WORDS.map((w) => (
-                <button
+                <motion.button
                   key={w}
                   className="btn"
                   aria-pressed={mode.kind === "word" && mode.target === w}
                   onClick={() => pickNew({ kind: "word", target: w })}
+                  whileHover={hoverLift}
+                  whileTap={tapPress}
                 >
                   {w}
-                </button>
+                </motion.button>
               ))}
             </div>
           </>
         )}
-      </div>
+      </motion.div>
 
       {tab === "words" ? (
         <WordPractice onStats={setStats} />
       ) : (
-        <div className="live-layout">
+        <motion.div variants={fadeIn} className="live-layout">
           <section>
             <div className="camera-wrap">
               <video ref={videoRef} playsInline muted autoPlay className={running ? "mirrored" : ""} />
@@ -425,12 +439,12 @@ export default function PracticePage() {
               single-letter mode.
             </p>
           )}
-          </section>
-        </div>
+        </section>
+        </motion.div>
       )}
 
       {stats && Object.keys(stats.letters).length > 0 && (
-        <div className="card">
+        <motion.div variants={fadeUp} className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
             <h2 style={{ margin: 0 }}>Your stats</h2>
             <div className="btn-row" style={{ margin: 0 }}>
@@ -446,8 +460,9 @@ export default function PracticePage() {
             Best streak: {stats.streakBest} day{stats.streakBest === 1 ? "" : "s"}.
             Stats stay in this browser only.
           </p>
-        </div>
+        </motion.div>
       )}
-    </>
+      </motion.div>
+    </MotionConfig>
   );
 }

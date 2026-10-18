@@ -8,6 +8,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { libraryRows, type LibraryRow } from "@/lib/signs/library";
+import {
+  MotionConfig,
+  motion,
+  staggerContainer,
+  fadeUp,
+  fadeUpCapped,
+  hoverLift,
+} from "@/components/motion-kit";
 
 const STATUS_META: Record<
   LibraryRow["status"],
@@ -43,8 +51,9 @@ export default function LibraryPage() {
   }, [rows, filter, query]);
 
   return (
-    <>
-      <div className="card">
+    <MotionConfig reducedMotion="user">
+      <motion.div variants={staggerContainer} initial="hidden" animate="show">
+        <motion.div variants={fadeUp} className="card">
         <h2>Sign library</h2>
         <p>
           Common words and how SignFlow signs them right now. Words with a
@@ -81,29 +90,33 @@ export default function LibraryPage() {
             style={{ minWidth: 140 }}
           />
         </div>
-      </div>
+        </motion.div>
 
-      <div className="card">
-        {!rows ? (
-          <p className="muted">Loading library…</p>
-        ) : visible.length === 0 ? (
-          <p className="muted">No words match.</p>
-        ) : (
-          <ul className="library-list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {visible.map((r) => {
-              const meta = STATUS_META[r.status];
-              return (
-                <li
-                  key={r.word}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    padding: "10px 0",
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                >
+        <motion.div variants={fadeUp} className="card">
+          {!rows ? (
+            <p className="muted">Loading library…</p>
+          ) : visible.length === 0 ? (
+            <p className="muted">No words match.</p>
+          ) : (
+            <ul className="library-list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {visible.map((r, rowIdx) => {
+                const meta = STATUS_META[r.status];
+                return (
+                  <motion.li
+                    key={r.word}
+                    custom={rowIdx}
+                    variants={fadeUpCapped}
+                    whileHover={hoverLift}
+                    whileTap={{ scale: 0.99 }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      padding: "10px 0",
+                      borderBottom: "1px solid var(--border)",
+                    }}
+                  >
                   <strong style={{ minWidth: 130 }}>{r.word}</strong>
                   <span className={meta.cls} title={`SignFlow renders this as: ${meta.label}`}>
                     {meta.label}
@@ -129,17 +142,18 @@ export default function LibraryPage() {
                   >
                     Reference ↗
                   </a>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <p className="small muted" style={{ marginBottom: 0, marginTop: 12 }}>
-          Built-in signs are approximate single hand shapes — shape only, no
-          motion, not certified ASL. Teach mode recordings are your own and
-          always take precedence.
-        </p>
-      </div>
-    </>
+                  </motion.li>
+                );
+              })}
+            </ul>
+          )}
+          <p className="small muted" style={{ marginBottom: 0, marginTop: 12 }}>
+            Built-in signs are approximate single hand shapes — shape only, no
+            motion, not certified ASL. Teach mode recordings are your own and
+            always take precedence.
+          </p>
+        </motion.div>
+      </motion.div>
+    </MotionConfig>
   );
 }

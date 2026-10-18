@@ -2,6 +2,14 @@
 
 import { useEffect, useState, type ChangeEvent } from "react";
 import {
+  AnimatePresence,
+  MotionConfig,
+  motion,
+  staggerContainer,
+  fadeUp,
+  collapse,
+} from "@/components/motion-kit";
+import {
   useSettings,
   loadTranscripts,
   deleteTranscript,
@@ -94,9 +102,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
-      <div className="card">
-        <h2>Recognition</h2>
+    <MotionConfig reducedMotion="user">
+      <motion.div variants={staggerContainer} initial="hidden" animate="show">
+        <motion.div variants={fadeUp} className="card">
+          <h2>Recognition</h2>
 
         <div className="setting-row">
           <div>
@@ -175,10 +184,10 @@ export default function SettingsPage() {
             <span className="track" />
           </label>
         </div>
-      </div>
+        </motion.div>
 
-      <div className="card">
-        <h2>Display</h2>
+        <motion.div variants={fadeUp} className="card">
+          <h2>Display</h2>
         <div className="setting-row">
           <div>
             <strong>Mirror preview</strong>
@@ -209,10 +218,10 @@ export default function SettingsPage() {
             <span className="track" />
           </label>
         </div>
-      </div>
+        </motion.div>
 
-      <div className="card">
-        <h2>Transcripts</h2>
+        <motion.div variants={fadeUp} className="card">
+          <h2>Transcripts</h2>
         <div className="setting-row">
           <div>
             <strong>Allow saving transcripts</strong>
@@ -232,54 +241,56 @@ export default function SettingsPage() {
           </label>
         </div>
 
-        {transcripts.length > 0 && (
-          <div>
-            <h3>Saved transcripts ({transcripts.length})</h3>
-            {transcripts.map((t) => (
-              <div
-                key={t.id}
-                className="setting-row"
-                style={{ alignItems: "flex-start" }}
-              >
-                <div style={{ overflowWrap: "anywhere" }}>
-                  {t.text || <span className="muted">(empty)</span>}
-                  <div className="desc">
-                    {new Date(t.savedAt).toLocaleString()}
+        <AnimatePresence initial={false}>
+          {transcripts.length > 0 && (
+            <motion.div key="saved-transcripts" {...collapse}>
+              <h3>Saved transcripts ({transcripts.length})</h3>
+              {transcripts.map((t) => (
+                <div
+                  key={t.id}
+                  className="setting-row"
+                  style={{ alignItems: "flex-start" }}
+                >
+                  <div style={{ overflowWrap: "anywhere" }}>
+                    {t.text || <span className="muted">(empty)</span>}
+                    <div className="desc">
+                      {new Date(t.savedAt).toLocaleString()}
+                    </div>
                   </div>
+                  <button
+                    className="btn danger"
+                    onClick={() => {
+                      deleteTranscript(t.id);
+                      setTranscripts(loadTranscripts());
+                    }}
+                  >
+                    Delete
+                  </button>
                 </div>
+              ))}
+              <div className="btn-row">
                 <button
                   className="btn danger"
                   onClick={() => {
-                    deleteTranscript(t.id);
-                    setTranscripts(loadTranscripts());
+                    if (confirmDeleteAll) {
+                      deleteAllTranscripts();
+                      setTranscripts([]);
+                      setConfirmDeleteAll(false);
+                    } else {
+                      setConfirmDeleteAll(true);
+                    }
                   }}
                 >
-                  Delete
+                  {confirmDeleteAll ? "Really delete ALL transcripts?" : "Delete all"}
                 </button>
               </div>
-            ))}
-            <div className="btn-row">
-              <button
-                className="btn danger"
-                onClick={() => {
-                  if (confirmDeleteAll) {
-                    deleteAllTranscripts();
-                    setTranscripts([]);
-                    setConfirmDeleteAll(false);
-                  } else {
-                    setConfirmDeleteAll(true);
-                  }
-                }}
-              >
-                {confirmDeleteAll ? "Really delete ALL transcripts?" : "Delete all"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </motion.div>
 
-      <div className="card">
-        <h2>Supported letters &amp; limitations</h2>
+        <motion.div variants={fadeUp} className="card">
+          <h2>Supported letters &amp; limitations</h2>
         <p>
           <strong>Supported (static):</strong> A B C D E F G H I K L M N O P Q R S T U
           V W X Y — 24 letters.
@@ -294,10 +305,10 @@ export default function SettingsPage() {
           different hand proportions may see lower accuracy. Common confusions
           observed in evaluation: M↔N/T, I↔Y, and occasionally A↔S.
         </p>
-      </div>
+        </motion.div>
 
-      <div className="card">
-        <h2>Camera troubleshooting</h2>
+        <motion.div variants={fadeUp} className="card">
+          <h2>Camera troubleshooting</h2>
         <p>
           <strong>Camera blocked?</strong> Camera access requires HTTPS (or
           localhost). Check your browser&apos;s site permissions — in iOS Safari:
@@ -312,10 +323,10 @@ export default function SettingsPage() {
           Recognition settings, and make sure your palm faces the camera the same
           way the training data did (palm toward camera, upright).
         </p>
-      </div>
+        </motion.div>
 
-      <div className="card">
-        <h2>Privacy &amp; data</h2>
+        <motion.div variants={fadeUp} className="card">
+          <h2>Privacy &amp; data</h2>
         <p>
           Camera frames are processed on-device and never uploaded or recorded.
           Settings and (if you opt in) transcripts are stored in this browser&apos;s
@@ -332,11 +343,18 @@ export default function SettingsPage() {
               already taught here are kept as they are. The file stays with you;
               nothing is uploaded.
             </div>
-            {importResult && (
-              <div className="desc" style={{ overflowWrap: "anywhere" }}>
-                {importResult}
-              </div>
-            )}
+            <AnimatePresence initial={false}>
+              {importResult && (
+                <motion.div
+                  key="import-result"
+                  {...collapse}
+                  className="desc"
+                  style={{ ...collapse.style, overflowWrap: "anywhere" }}
+                >
+                  {importResult}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           <div className="btn-row">
             <button
@@ -366,12 +384,14 @@ export default function SettingsPage() {
             </label>
           </div>
         </div>
-        {taughtCount === 0 && (
-          <div className="desc">
-            Nothing to export yet — teach a sign first, then come back to back
-            it up.
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {taughtCount === 0 && (
+            <motion.div key="no-signs-note" {...collapse} className="desc">
+              Nothing to export yet — teach a sign first, then come back to back
+              it up.
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="btn-row">
           <button
             className="btn danger"
@@ -392,7 +412,8 @@ export default function SettingsPage() {
             Delete saved transcripts
           </button>
         </div>
-      </div>
-    </>
+        </motion.div>
+      </motion.div>
+    </MotionConfig>
   );
 }

@@ -14,6 +14,7 @@ import { listSigns } from "@/lib/signs/custom-signs";
 import { MotionLetterWatcher } from "@/lib/signs/motion-letters";
 import { mirrorLandmarks } from "@/lib/features";
 import type { Landmark } from "@/lib/types";
+import { MotionConfig, motion } from "@/components/motion-kit";
 
 export default function LivePage() {
   const [settings, updateSettings] = useSettings();
@@ -296,7 +297,16 @@ export default function LivePage() {
     : "Tracking lost — show your hand";
 
   return (
-    <div className="live-workspace">
+    <MotionConfig reducedMotion="user">
+      {/* Camera view is latency-critical: the video element and detection
+          overlays are never animated. The whole workspace gets a single
+          opacity-only fade on mount — no transforms here. */}
+      <motion.div
+        className="live-workspace"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+      >
       <header className="workspace-heading">
         <div>
           <span className="eyebrow">YOUR PERSONAL SIGNING STUDIO</span>
@@ -640,6 +650,7 @@ export default function LivePage() {
       </section>
       </div>
       {notice && <p className="studio-notice" role="status">{notice}</p>}
-    </div>
+      </motion.div>
+    </MotionConfig>
   );
 }

@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { MotionConfig, motion, staggerContainer, fadeUp } from "@/components/motion-kit";
 
 const DEMO = "HELLO";
 
@@ -28,8 +29,13 @@ export default function Home() {
   }, []);
 
   return (
-    <>
-      <div className="card reveal" style={{ "--i": 0, textAlign: "center", padding: "40px 20px 32px" } as React.CSSProperties}>
+    <MotionConfig reducedMotion="user">
+      <motion.div variants={staggerContainer} initial="hidden" animate="show">
+        <motion.div
+          variants={fadeUp}
+          className="card"
+          style={{ textAlign: "center", padding: "40px 20px 32px" }}
+        >
         <h1 style={{ margin: "0 0 10px", fontSize: "clamp(2.4rem, 6vw, 3.4rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
           Say it with your hands.
         </h1>
@@ -48,10 +54,10 @@ export default function Home() {
         <p className="small muted" style={{ marginTop: 16, marginBottom: 0 }}>
           Best in Chrome or Safari with a front camera. Nothing ever leaves your device.
         </p>
-      </div>
+        </motion.div>
 
-      <div className="card reveal" style={{ "--i": 1, textAlign: "center" } as React.CSSProperties}>
-        <p className="small muted" style={{ marginTop: 0, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 12 }}>
+        <motion.div variants={fadeUp} className="card" style={{ textAlign: "center" }}>
+          <p className="small muted" style={{ marginTop: 0, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 12 }}>
           Now spelling
         </p>
         <div
@@ -83,10 +89,9 @@ export default function Home() {
         <p className="small muted" style={{ marginBottom: 0 }}>
           Fingerspelling, spelled back to you — the avatar page shows every hand shape.
         </p>
-      </div>
+        </motion.div>
 
-      <div className="reveal" style={{ "--i": 2 } as React.CSSProperties}>
-        <div className="card">
+        <motion.div variants={fadeUp} className="card">
           <h2>What it recognizes</h2>
           <p>
             <strong>the full ASL alphabet</strong> — 24 static letters plus the
@@ -106,9 +111,9 @@ export default function Home() {
             This is a <strong>fingerspelling assistant, not a full ASL translator</strong>:
             it does not recognize grammar, facial expressions, or continuous signing.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="card">
+        <motion.div variants={fadeUp} className="card">
           <h2>Private by construction</h2>
           <p>
             Camera frames are processed <strong>entirely on your device</strong> via
@@ -116,9 +121,9 @@ export default function Home() {
             Transcripts stay in memory unless you save them, and you can wipe
             everything in <Link href="/settings">Settings</Link>.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="card">
+        <motion.div variants={fadeUp} className="card">
           <h2>Honest limitations</h2>
           <p>
             Recognition depends on lighting, angle, and how closely your hand shapes
@@ -130,8 +135,8 @@ export default function Home() {
             approximate single hand shapes — the real signs add motion, so treat
             them as hints and learn from the library&apos;s references.
           </p>
-        </div>
-      </div>
-    </>
+        </motion.div>
+      </motion.div>
+    </MotionConfig>
   );
 }

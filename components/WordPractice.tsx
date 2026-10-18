@@ -6,6 +6,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import SignAvatar, { type Pose } from "@/components/SignAvatar";
+import {
+  MotionConfig,
+  motion,
+  staggerContainer,
+  fadeUp,
+  fadeIn,
+} from "@/components/motion-kit";
 import { spellSequence, FRAME_MS, type SignSequence } from "@/lib/signs/avatar-engine";
 import { loadSigns } from "@/lib/signs/custom-signs";
 import { sampleWord, sampleDrillWord, scoreTypedWord, type WordScore } from "@/lib/practice-words";
@@ -135,8 +142,9 @@ export default function WordPractice({
   };
 
   return (
-    <div className="live-layout">
-      <section>
+    <MotionConfig reducedMotion="user">
+      <motion.div variants={staggerContainer} initial="hidden" animate="show" className="live-layout">
+        <motion.section variants={fadeIn}>
         <div className="stage">
           <SignAvatar
             currentPose={playing ? null : (seq?.frames[seq.frames.length - 1] ?? null)}
@@ -159,9 +167,9 @@ export default function WordPractice({
               : `${rounds.right}/${rounds.total} words fully correct`}
           </span>
         </div>
-      </section>
+      </motion.section>
 
-      <section className="card" aria-live="polite">
+      <motion.section variants={fadeUp} className="card" aria-live="polite">
         <h2>What word did the avatar sign?</h2>
         {!poses && <p className="muted">Loading pose data…</p>}
         {poses && !result && (
@@ -191,34 +199,44 @@ export default function WordPractice({
           </>
         )}
         {result && (
-          <>
-            <p style={{ color: result.correct === result.total ? "var(--ok)" : "var(--warn)", fontWeight: 700, fontSize: 20 }}>
+          <motion.div
+            key={word}
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+          >
+            <motion.p
+              variants={fadeUp}
+              style={{ color: result.correct === result.total ? "var(--ok)" : "var(--warn)", fontWeight: 700, fontSize: 20 }}
+            >
               {result.correct === result.total ? "✓ Perfect" : `${result.correct}/${result.total} letters`} — it was{" "}
               <strong>{word}</strong>
-            </p>
-            <div className="letter-strip">
+            </motion.p>
+            <motion.div variants={fadeIn} className="letter-strip">
               {result.perLetter.map((p, i) => (
-                <span
+                <motion.span
                   key={i}
+                  variants={fadeUp}
                   className="letter-chip"
                   data-active={p.hit}
                   style={p.hit ? undefined : { textDecoration: "line-through", opacity: 0.7 }}
                 >
                   {p.letter}
-                </span>
+                </motion.span>
               ))}
-            </div>
-            <p className="small muted">
+            </motion.div>
+            <motion.p variants={fadeUp} className="small muted">
               Per-letter results feed your practice stats and weak-letter drills.
-            </p>
-            <div className="btn-row">
+            </motion.p>
+            <motion.div variants={fadeUp} className="btn-row">
               <button className="btn primary" onClick={nextWord}>
                 Next word →
               </button>
-            </div>
-          </>
+            </motion.div>
+          </motion.div>
         )}
-      </section>
-    </div>
+      </motion.section>
+      </motion.div>
+    </MotionConfig>
   );
 }
