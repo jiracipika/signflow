@@ -1,11 +1,5 @@
 import Link from "next/link";
-import SignAvatar from "@/components/SignAvatar";
-import poseData from "@/public/models/asl-poses-v1.json";
-
-const helloPose = Array.from({ length: 21 }, (_, i) => {
-  const { lm } = poseData.poses.H;
-  return { x: lm[i * 3], y: lm[i * 3 + 1], z: lm[i * 3 + 2] };
-});
+import Handshape from "@/components/Handshape";
 
 const activities = [
   { href: "/practice", title: "Practice", description: "Drill individual handshapes and read fingerspelled words." },
@@ -25,10 +19,10 @@ export default function Home() {
             <Link href="/avatar" className="btn">Watch the avatar</Link>
           </div>
         </div>
-        <figure className="home-demo">
-          <SignAvatar currentPose={helloPose} label="H" />
-          <figcaption>Fingerspelling preview <span>H E L L O</span></figcaption>
-        </figure>
+        <div className="home-demo">
+          <Handshape letter="H" />
+          <p className="home-demo-caption">Fingerspelling preview <span>H E L L O</span></p>
+        </div>
       </section>
       <section className="home-activities" aria-label="Practice and reference">
         {activities.map(({ href, title, description }) => (

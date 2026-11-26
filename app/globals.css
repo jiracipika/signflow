@@ -744,7 +744,7 @@ body { background: radial-gradient(ellipse at 18% 0%, #203733 0, transparent 43r
   border-radius: 24px;
   background: radial-gradient(ellipse at center, #284743, #162320 80%);
 }
-.home-demo figcaption {
+.home-demo-caption {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -753,7 +753,7 @@ body { background: radial-gradient(ellipse at 18% 0%, #203733 0, transparent 43r
   color: var(--muted);
   font-size: .875rem;
 }
-.home-demo figcaption span { font-family: var(--font-mono); color: var(--accent); }
+.home-demo-caption span { font-family: var(--font-mono); color: var(--accent); }
 .home-activities { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 36px; }
 .home-activities .card { margin: 0; color: var(--text); text-decoration: none; }
 .home-activities .card:hover { border-color: var(--accent); }
@@ -773,3 +773,28 @@ body { background: radial-gradient(ellipse at 18% 0%, #203733 0, transparent 43r
   .home-activities { margin-top: 20px; }
   .studio-settings { margin-left: 0; }
 }
+
+.handshape {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  color: #152620;
+  background: #f7faf6;
+}
+.handshape img { display: block; width: min(100%, 240px); height: auto; aspect-ratio: 1; object-fit: contain; }
+.handshape img.handshape-mirrored { transform: scaleX(-1); }
+.handshape figcaption { font-size: .9rem; text-align: center; }
+.handshape-stage { display: grid; place-items: center; min-height: 300px; padding: 12px; }
+.handshape-stage + progress { width: 100%; accent-color: var(--accent); }
+.home-demo .handshape img { width: min(100%, 290px); }
+.home-demo-caption { margin: 0; }
+.practice-handshape { margin-top: 18px; max-width: 280px; }
+.alphabet-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.alphabet-grid button { cursor: pointer; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--card2); padding: 4px; }
+.alphabet-grid button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.alphabet-grid .handshape { padding: 5px; border-radius: 5px; }

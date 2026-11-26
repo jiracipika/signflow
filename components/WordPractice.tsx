@@ -5,6 +5,7 @@
 // letter-by-letter; each letter feeds the shared practice stats.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import FingerspellingPlayer from "@/components/FingerspellingPlayer";
 import SignAvatar, { type Pose } from "@/components/SignAvatar";
 import {
   MotionConfig,
@@ -13,51 +14,27 @@ import {
   fadeUp,
   fadeIn,
 } from "@/components/motion-kit";
-import { spellSequence, FRAME_MS, type SignSequence } from "@/lib/signs/avatar-engine";
+import { FRAME_MS } from "@/lib/signs/avatar-engine";
 import { recordedMotions } from "@/lib/signs/custom-signs";
 import { sampleWord, sampleDrillWord, scoreTypedWord, type WordScore } from "@/lib/practice-words";
 import { loadStats, recordRound, weakestLetters, type PracticeStats } from "@/lib/practice-stats";
 
-type PosesFile = { poses: Record<string, { lm: number[] }> };
 
 export default function WordPractice({
   onStats,
 }: {
   onStats: (s: PracticeStats) => void;
 }) {
-  const [poses, setPoses] = useState<Record<string, Pose[]> | null>(null);
-  const [motionSigns, setMotionSigns] = useState<Record<string, Pose[][]>>({});
+  const [motionSigns, setMotionSigns] = useState<Record<string, Pose[][]> | null>(null);
   const [word, setWord] = useState<string>("");
-  const [seq, setSeq] = useState<SignSequence | null>(null);
+  const [run, setRun] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const finish = useCallback(() => setPlaying(false), []);
   const [answer, setAnswer] = useState("");
   const [result, setResult] = useState<WordScore | null>(null);
   const [rounds, setRounds] = useState({ right: 0, total: 0 });
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/models/asl-poses-v1.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`poses fetch ${r.status}`);
-        return r.json() as Promise<PosesFile>;
-      })
-      .then((d) => {
-        if (cancelled) return;
-        const out: Record<string, Pose[]> = {};
-        for (const [k, v] of Object.entries(d.poses)) {
-          out[k] = [];
-          for (let i = 0; i < 21; i++)
-            out[k].push({ x: v.lm[i * 3], y: v.lm[i * 3 + 1], z: v.lm[i * 3 + 2] });
-        }
-        setPoses(out);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setMotionSigns(recordedMotions()), 0);
@@ -66,22 +43,13 @@ export default function WordPractice({
 
   const playWord = useCallback(
     (w: string) => {
-      if (!poses) return;
       if (timerRef.current) clearTimeout(timerRef.current);
-      const motion = motionSigns[w];
-      if (motion) {
-        setSeq({ frames: motion, caption: w, spans: [], words: [] });
-        const ms = motion.length * FRAME_MS + 400;
-        timerRef.current = setTimeout(() => setPlaying(false), ms);
-      } else {
-        const s = spellSequence(w, poses);
-        setSeq(s);
-        const ms = s.frames.length * FRAME_MS + 400;
-        timerRef.current = setTimeout(() => setPlaying(false), ms);
-      }
+      const recording = motionSigns?.[w];
+      if (recording) timerRef.current = setTimeout(finish, recording.length * FRAME_MS);
+      setRun((current) => current + 1);
       setPlaying(true);
     },
-    [poses, motionSigns]
+    [finish, motionSigns]
   );
 
   const nextWord = useCallback(() => {
@@ -103,10 +71,10 @@ export default function WordPractice({
   // first word once poses are ready
   const startedRef = useRef(false);
   useEffect(() => {
-    if (!poses || startedRef.current) return;
+    if (!motionSigns || startedRef.current) return;
     startedRef.current = true;
     nextWord();
-  }, [poses, nextWord]);
+  }, [motionSigns, nextWord]);
 
   useEffect(() => {
     return () => {
@@ -132,15 +100,12 @@ export default function WordPractice({
       <motion.div variants={staggerContainer} initial="hidden" animate="show" className="live-layout">
         <motion.section variants={fadeIn}>
         <div className="stage">
-          <SignAvatar
-            currentPose={playing ? null : (seq?.frames[seq.frames.length - 1] ?? null)}
-            motion={playing ? seq?.frames ?? null : null}
-          />
-          {playing && seq && (
-            <div className="stage-caption" aria-live="off">
-              ●&nbsp;&nbsp;watch…
-            </div>
-          )}
+          {playing && (motionSigns?.[word] ? (
+            <SignAvatar currentPose={null} key={run} motion={motionSigns[word]} />
+          ) : (
+            <FingerspellingPlayer key={run} text={word} reveal={false} onComplete={finish} />
+          ))}
+          {!playing && <div className="handshape-stage"><p>Replay to watch the word again.</p></div>}
         </div>
         <div className="transport">
           <button className="btn" onClick={() => word && playWord(word)} disabled={!word}>
@@ -157,8 +122,7 @@ export default function WordPractice({
 
       <motion.section variants={fadeUp} className="card" aria-live="polite">
         <h2>What word did the avatar sign?</h2>
-        {!poses && <p className="muted">Loading pose data…</p>}
-        {poses && !result && (
+        {!result && (
           <>
             <p className="small muted">
               The avatar signs a common word — watch the letter shapes, then type

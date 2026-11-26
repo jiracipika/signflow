@@ -24,10 +24,13 @@ This is **not a full ASL translator**. It supports two recognition modes:
 
 ## Signing avatar, library, and word practice
 
-- **[Avatar](/avatar)** — type anything and a canvas hand fingerspells it with
-  natural letter-to-letter flow, real J/Z stroke paths, pause/replay/loop,
-  speed control, and a letter-chip caption synced to the engine's frame spans
-  (tap a chip to replay that letter). Deep link: `/avatar?text=HELLO`.
+- **[Avatar](/avatar)** — play illustrated letter sequences or browse the full
+  alphabet. J and Z include motion directions. Type an exact taught motion
+  label to replay your recording. Deep link: `/avatar?text=HELLO`.
+- **Alphabet artwork** — WPClipart public-domain ASL illustrations, hosted by
+  [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:ASL_letters).
+  The local files in `public/asl/` are the individual `Sign language A.svg`
+  through `Sign language Z.svg` originals.
 - **[Library](/library)** — browsable common words showing how SignFlow renders
   each one today (taught sign / built-in approximation / fingerspelled), with
   Lifeprint (ASLU) and Signing Savvy reference links per entry.
