@@ -1,10 +1,5 @@
 "use client";
 
-// Sign library: browsable common words. Each entry shows how SignFlow renders
-// it today (taught recording / built-in approximation / fingerspelling), a
-// fingerspelling preview that plays on the avatar, and a link to learn the
-// real sign from Lifeprint (ASLU) or Signing Savvy.
-
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { libraryRows, type LibraryRow } from "@/lib/signs/library";
@@ -43,8 +38,8 @@ export default function LibraryPage() {
     if (!rows) return [];
     const q = query.trim().toUpperCase();
     return rows.filter((r) => {
-      if (filter === "signed" && r.status === "fingerspelled") return false;
-      if (filter === "fingerspelled" && r.status !== "fingerspelled") return false;
+      if (filter === "signed" && r.playback !== "recording") return false;
+      if (filter === "fingerspelled" && r.playback !== "fingerspelling") return false;
       if (q && !r.word.includes(q)) return false;
       return true;
     });
@@ -56,10 +51,8 @@ export default function LibraryPage() {
         <motion.div variants={fadeUp} className="card">
         <h2>Sign library</h2>
         <p>
-          Common words and how SignFlow signs them right now. Words with a
-          taught or built-in sign play that motion on the avatar; everything
-          else is fingerspelled letter by letter. Each entry links to the real
-          sign —{" "}
+          The avatar replays motion recordings from Teach and fingerspells other words.
+          Learn the ASL signs from{" "}
           <a href="https://www.lifeprint.com/" target="_blank" rel="noreferrer">
             Lifeprint/ASLU
           </a>{" "}
@@ -77,7 +70,7 @@ export default function LibraryPage() {
               aria-pressed={filter === f}
               onClick={() => setFilter(f)}
             >
-              {f === "all" ? "All" : f === "signed" ? "Has a sign" : "Fingerspelled only"}
+              {f === "all" ? "All" : f === "signed" ? "Has a recording" : "Fingerspelled only"}
             </button>
           ))}
           <input
@@ -118,7 +111,7 @@ export default function LibraryPage() {
                     }}
                   >
                   <strong style={{ minWidth: 130 }}>{r.word}</strong>
-                  <span className={meta.cls} title={`SignFlow renders this as: ${meta.label}`}>
+                  <span className={meta.cls} title={`Avatar plays ${r.playback}`}>
                     {meta.label}
                   </span>
                   <span className="small muted" style={{ flex: 1, minWidth: 200 }}>
@@ -130,7 +123,7 @@ export default function LibraryPage() {
                     title={`Fingerspell/sign ${r.word} on the avatar`}
                   >
                     <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
-                      {r.fingerspelling}
+                      {r.playback === "recording" ? "Play recording" : r.fingerspelling}
                     </span>
                   </Link>
                   <a
@@ -148,9 +141,7 @@ export default function LibraryPage() {
             </ul>
           )}
           <p className="small muted" style={{ marginBottom: 0, marginTop: 12 }}>
-            Built-in signs are approximate single hand shapes — shape only, no
-            motion, not certified ASL. Teach mode recordings are your own and
-            always take precedence.
+            Built-in handshapes are static previews. Follow the reference videos for the full signs.
           </p>
         </motion.div>
       </motion.div>

@@ -2,7 +2,7 @@
 
 // Persisted app settings (localStorage). Keep in sync with Settings page.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type Settings = {
   dominantHand: "right" | "left";
@@ -18,11 +18,10 @@ export const DEFAULT_SETTINGS: Settings = {
   dominantHand: "right",
   mirrorPreview: true,
   showLandmarks: true,
-  // Faster defaults make ordinary fingerspelling feel continuous. Each can
-  // still be tuned in Settings when a slower or more conservative pace helps.
+  // Timing and score thresholds can be tuned in Settings.
   stabilityFrames: 4,
   minConfidence: 0.42,
-  autoCommit: true,
+  autoCommit: false,
   saveTranscripts: false,
 };
 
@@ -49,9 +48,11 @@ export function saveSettings(s: Settings) {
 }
 
 export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {
-  const [settings, setSettings] = useState<Settings>(() =>
-    typeof window === "undefined" ? DEFAULT_SETTINGS : loadSettings()
-  );
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  useEffect(() => {
+    const id = setTimeout(() => setSettings(loadSettings()), 0);
+    return () => clearTimeout(id);
+  }, []);
   const update = (patch: Partial<Settings>) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };

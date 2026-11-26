@@ -14,7 +14,7 @@ import {
   fadeIn,
 } from "@/components/motion-kit";
 import { spellSequence, FRAME_MS, type SignSequence } from "@/lib/signs/avatar-engine";
-import { loadSigns } from "@/lib/signs/custom-signs";
+import { recordedMotions } from "@/lib/signs/custom-signs";
 import { sampleWord, sampleDrillWord, scoreTypedWord, type WordScore } from "@/lib/practice-words";
 import { loadStats, recordRound, weakestLetters, type PracticeStats } from "@/lib/practice-stats";
 
@@ -60,21 +60,7 @@ export default function WordPractice({
   }, []);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      const out: Record<string, Pose[][]> = {};
-      for (const s of loadSigns()) {
-        if (s.kind !== "dynamic") continue;
-        const proto = s.prototypes[0];
-        out[s.label.toUpperCase()] = proto.map((f) =>
-          Array.from({ length: 21 }, (_, i) => ({
-            x: f[i * 3] ?? 0,
-            y: f[i * 3 + 1] ?? 0,
-            z: f[i * 3 + 2] ?? 0,
-          }))
-        );
-      }
-      setMotionSigns(out);
-    }, 0);
+    const id = setTimeout(() => setMotionSigns(recordedMotions()), 0);
     return () => clearTimeout(id);
   }, []);
 

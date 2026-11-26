@@ -74,16 +74,16 @@ type Waypoint = { dx: number; dy: number; w: number };
 
 const J_STROKE: Waypoint[] = [
   { dx: 0, dy: 0, w: 1 }, // start of vertical stroke
-  { dx: 0.04, dy: -0.3, w: 3 }, // down the stem
-  { dx: -0.22, dy: -0.34, w: 2 }, // hook curves left along the bottom
-  { dx: -0.3, dy: -0.26, w: 1 }, // hook tip rises slightly
+  { dx: 0.04, dy: 0.3, w: 3 }, // down the stem
+  { dx: -0.22, dy: 0.34, w: 2 }, // hook curves left along the bottom
+  { dx: -0.3, dy: 0.26, w: 1 }, // hook tip rises slightly
 ];
 
 const Z_STROKE: Waypoint[] = [
-  { dx: -0.18, dy: 0.1, w: 1 }, // top-left
-  { dx: 0.18, dy: 0.1, w: 1 }, // top-right
-  { dx: -0.18, dy: -0.16, w: 1.4 }, // diagonal to bottom-left
-  { dx: 0.18, dy: -0.16, w: 1 }, // bottom-right
+  { dx: -0.18, dy: -0.1, w: 1 }, // top-left
+  { dx: 0.18, dy: -0.1, w: 1 }, // top-right
+  { dx: -0.18, dy: 0.16, w: 1.4 }, // diagonal to bottom-left
+  { dx: 0.18, dy: 0.16, w: 1 }, // bottom-right
 ];
 
 function strokeFrames(

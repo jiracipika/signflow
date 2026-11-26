@@ -137,3 +137,12 @@ test("pacing lives in the frame count, not a separate clock", () => {
   const fastHold = fast.spans[0].end - fast.spans[0].start;
   assert.ok(fastHold < slowHold, "per-letter span shrinks with holdMs");
 });
+
+test("avatar draws J and Z down the screen instead of upside down", () => {
+  const j = spellSequence("J", P);
+  const js = j.spans[0];
+  assert.ok(j.frames[js.start + Math.floor((js.end - js.start) / 2)][20].y > j.frames[js.start][20].y);
+  const z = spellSequence("Z", P);
+  const zs = z.spans[0];
+  assert.ok(z.frames[zs.end - 1][8].y > z.frames[zs.start][8].y);
+});

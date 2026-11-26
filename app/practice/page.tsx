@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHandTracking } from "@/lib/camera";
+import { recognitionLandmarks } from "@/lib/features";
 import { loadModel, predictLandmarks } from "@/lib/model";
 import { TemporalDecoder } from "@/lib/decoder";
 import { useSettings } from "@/lib/settings";
@@ -113,6 +114,7 @@ export default function PracticePage() {
     decoderRef.current = new TemporalDecoder({
       stabilityFrames: settings.stabilityFrames,
       minConfidence: settings.minConfidence,
+      autoCommit: false,
     });
   }, [settings.stabilityFrames, settings.minConfidence]);
 
@@ -121,7 +123,7 @@ export default function PracticePage() {
       setLandmarks(frame ? frame.landmarks : null);
       const d = decoderRef.current;
       if (!d || !modelReady) return;
-      const pred = frame ? predictLandmarks(frame.landmarks) : null;
+      const pred = frame ? predictLandmarks(recognitionLandmarks(frame)) : null;
       const state = d.push(pred, frame?.timestampMs ?? performance.now());
 
       if (!pred) {

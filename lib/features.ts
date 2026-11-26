@@ -118,3 +118,8 @@ export function engineerFeatures(lm: Landmark[]): Float64Array {  const f = new 
 
   return f;
 }
+
+/** Map either anatomical hand to the right-hand training geometry. */
+export function recognitionLandmarks(frame: import("./types.ts").HandFrame): Landmark[] {
+  return frame.handedness === "Left" ? mirrorLandmarks(frame.landmarks) : frame.landmarks;
+}

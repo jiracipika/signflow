@@ -4,16 +4,17 @@
 // labeled — Teach mode recordings beat them.
 
 import type { Landmark } from "../types.ts";
-import { normalizeFrame, resampleSequence } from "./normalize.ts";
+import { isValidHand, normalizeFrame, normalizeMotion, resampleSequence } from "./normalize.ts";
 import { dtwDistance } from "./dtw.ts";
 
 export type SignKind = "static" | "dynamic";
-export type SignLabel = { text: string; kind: SignKind; builtin: boolean };
+export type SignLabel = { text: string; kind: SignKind; builtin: boolean; needsRecording?: boolean };
 
 type StoredSign = {
   label: string;
   kind: SignKind;
   builtin: boolean;
+  wristMotion?: true;
   /** static: array of prototype frames (already normalized, resampled to 1);
    *  dynamic: array of prototype sequences (each resampled to 32 frames) */
   prototypes: number[][][];
@@ -163,7 +164,12 @@ export function saveCustom(signs: StoredSign[]) {
 }
 
 export function listSigns(): SignLabel[] {
-  return loadSigns().map(({ label, kind, builtin }) => ({ text: label, kind, builtin }));
+  return loadSigns().map(({ label, kind, builtin, wristMotion }) => ({
+    text: label,
+    kind,
+    builtin,
+    ...(kind === "dynamic" && !wristMotion ? { needsRecording: true } : {}),
+  }));
 }
 
 export function deleteSign(label: string) {
@@ -178,7 +184,7 @@ export function teachStaticSign(label: string, samples: TeachSample[]): boolean 
   const clean = label.trim().slice(0, 40);
   if (!clean || samples.length === 0) return false;
   const protos = samples
-    .filter((s) => s.frames.length > 0)
+    .filter((s) => s.frames.length > 0 && isValidHand(s.frames[s.frames.length - 1]))
     .map((s) => [Array.from(normalizeFrame(s.frames[s.frames.length - 1]))]);
   if (protos.length === 0) return false;
   const existing = loadSigns().filter(
@@ -195,9 +201,9 @@ export function teachDynamicSign(label: string, samples: TeachSample[]): boolean
   const clean = label.trim().slice(0, 40);
   if (!clean || samples.length === 0) return false;
   const protos = samples
-    .filter((s) => s.frames.length >= 4)
+    .filter((s) => s.frames.length >= 4 && s.frames.every(isValidHand))
     .map((s) =>
-      Array.from(resampleSequence(s.frames.map(normalizeFrame), SEQ_LEN), (f) =>
+      Array.from(resampleSequence(normalizeMotion(s.frames), SEQ_LEN), (f) =>
         Array.from(f)
       )
     );
@@ -207,7 +213,7 @@ export function teachDynamicSign(label: string, samples: TeachSample[]): boolean
   );
   saveCustom([
     ...existing.filter((s) => !s.builtin),
-    { label: clean, kind: "dynamic", builtin: false, prototypes: protos },
+    { label: clean, kind: "dynamic", builtin: false, wristMotion: true, prototypes: protos },
   ]);
   return true;
 }
@@ -225,10 +231,11 @@ export type SignMatch = {
 
 /** Match a single held frame against static sign prototypes. */
 export function matchStatic(lm: Landmark[]): SignMatch | null {
+  if (!isValidHand(lm)) return null;
   const v = normalizeFrame(lm);
-  let best: SignMatch | null = null;
+  const candidates: SignMatch[] = [];
   for (const s of loadSigns()) {
-    if (s.kind !== "static") continue;
+    if (s.kind !== "static" || (s.builtin && s.label !== "I LOVE YOU")) continue;
     let bestD = Infinity;
     for (const p of s.prototypes) {
       const f = p[0];
@@ -237,27 +244,50 @@ export function matchStatic(lm: Landmark[]): SignMatch | null {
       d = Math.sqrt(d);
       if (d < bestD) bestD = d;
     }
-    if (!best || bestD < best.distance)
-      best = { label: s.label, kind: "static", builtin: s.builtin, distance: bestD };
+    candidates.push({ label: s.label, kind: "static", builtin: s.builtin, distance: bestD });
   }
-  return best;
+  return selectMatch(candidates, 0.9, 0.15);
 }
 
 /** Match a recorded motion sequence against dynamic sign prototypes. */
 export function matchDynamic(frames: Landmark[][]): SignMatch | null {
-  if (frames.length < 4) return null;
-  const probe = resampleSequence(frames.map(normalizeFrame), SEQ_LEN);
-  let best: SignMatch | null = null;
+  if (frames.length < 4 || !frames.every(isValidHand)) return null;
+  const probe = resampleSequence(normalizeMotion(frames), SEQ_LEN);
+  const candidates: SignMatch[] = [];
   for (const s of loadSigns()) {
-    if (s.kind !== "dynamic") continue;
+    if (s.kind !== "dynamic" || !s.wristMotion) continue;
     let bestD = Infinity;
     for (const p of s.prototypes) {
       const proto = p.map((f) => Float64Array.from(f));
       const d = dtwDistance(probe, proto);
       if (d < bestD) bestD = d;
     }
-    if (!best || bestD < best.distance)
-      best = { label: s.label, kind: "dynamic", builtin: s.builtin, distance: bestD };
+    candidates.push({ label: s.label, kind: "dynamic", builtin: s.builtin, distance: bestD });
   }
-  return best;
+  return selectMatch(candidates, 0.9, 0.15);
+}
+
+// These distances are heuristic. Ask the user to review even accepted matches.
+function selectMatch(candidates: SignMatch[], maxDistance: number, minGap: number): SignMatch | null {
+  candidates.sort((a, b) => a.distance - b.distance);
+  const [best] = candidates;
+  if (!best || best.distance > maxDistance) return null;
+  const runnerUp = candidates.find((candidate) => candidate.label.toLowerCase() !== best.label.toLowerCase());
+  return runnerUp && runnerUp.distance - best.distance < minGap ? null : best;
+}
+
+/** Reconstruct a recorded pose sequence for playback, including wrist travel. */
+export function recordedMotions(): Record<string, Landmark[][]> {
+  const motions: Record<string, Landmark[][]> = Object.create(null);
+  for (const sign of loadSigns()) {
+    if (sign.kind !== "dynamic") continue;
+    motions[sign.label.toUpperCase()] = sign.prototypes[0].map((frame) =>
+      Array.from({ length: 21 }, (_, i) => ({
+        x: i === 0 ? frame[0] : frame[i * 3] + frame[0],
+        y: i === 0 ? frame[1] : frame[i * 3 + 1] + frame[1],
+        z: i === 0 ? frame[2] : frame[i * 3 + 2] + frame[2],
+      }))
+    );
+  }
+  return motions;
 }

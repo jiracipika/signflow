@@ -702,3 +702,74 @@ body { background: radial-gradient(ellipse at 12% 0%, #112237 0, transparent 42r
 .camera-spinner { width: 42px; height: 42px; border: 2px solid #9bdcd930; border-top-color: #9bdcd9; border-radius: 50%; animation: studio-spin 1s linear infinite; }
 @keyframes studio-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .camera-spinner { animation: none; } }
+
+/* Shared SignFlow palette */
+:root {
+  --bg: #101619;
+  --card: #192326;
+  --card2: #233236;
+  --text: #f0f7f5;
+  --muted: #adc0bc;
+  --accent: #9ce6ca;
+  --accent-strong: #82d9b9;
+  --border: #344644;
+}
+
+body { background: radial-gradient(ellipse at 18% 0%, #203733 0, transparent 43rem), var(--bg); }
+.topnav .brand-mark { background: var(--accent); color: #142b25; }
+.btn.primary, .live-workspace .btn.primary {
+  background: var(--accent);
+  color: #142b25;
+  border-color: transparent;
+}
+.container:has(.signflow-home) { max-width: 1200px; }
+.signflow-home { padding-block: clamp(26px, 6vw, 72px); }
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  gap: clamp(20px, 5vw, 64px);
+  align-items: center;
+}
+.home-intro h1 {
+  font-size: clamp(3rem, 7.4vw, 6rem);
+  line-height: .98;
+  letter-spacing: -.07em;
+  margin: 0;
+}
+.home-intro p { max-width: 42ch; margin-block: 24px; color: var(--muted); }
+.home-demo {
+  margin: 0;
+  padding: clamp(12px, 2vw, 24px);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: radial-gradient(ellipse at center, #284743, #162320 80%);
+}
+.home-demo figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 4px 0;
+  color: var(--muted);
+  font-size: .875rem;
+}
+.home-demo figcaption span { font-family: var(--font-mono); color: var(--accent); }
+.home-activities { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 36px; }
+.home-activities .card { margin: 0; color: var(--text); text-decoration: none; }
+.home-activities .card:hover { border-color: var(--accent); }
+.home-activities h2 { display: flex; justify-content: space-between; font-size: 1.2rem; margin: 0; }
+.home-activities h2 span { color: var(--accent); }
+.home-activities p, .home-scope { color: var(--muted); font-size: .9rem; }
+.home-activities p { margin-bottom: 0; }
+.home-scope { margin: 24px 0 0; }
+.live-workspace .card { background: var(--card); border-color: var(--border); }
+.studio-camera { background: radial-gradient(ellipse at center, #243d39, #101a19 75%); }
+.studio-mode { background: #141e20; }
+.studio-mode button[aria-pressed="true"] { background: #2c493f; color: #d8f8e9; }
+.live-workspace .tentative-letter, .live-workspace .transcript-box { background: #111c1e; border-color: var(--border); }
+.word-signs h2 { margin-top: 0; }
+@media (max-width: 720px) {
+  .home-hero, .home-activities { grid-template-columns: minmax(0, 1fr); }
+  .home-activities { margin-top: 20px; }
+  .studio-settings { margin-left: 0; }
+}

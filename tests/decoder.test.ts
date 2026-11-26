@@ -91,3 +91,22 @@ test("low confidence predictions are ignored", () => {
   for (let i = 0; i < 20; i++) d.push(P("E", 0.4), i * 33);
   assert.equal(d.getState().tentative, null);
 });
+
+test("ambiguous scores never become ready or auto-commit", () => {
+  const decoder = new TemporalDecoder();
+  for (let i = 0; i < 30; i++) {
+    decoder.push({ ...P("M", 0.51), probabilities: { M: 0.51, N: 0.48 } }, i * 34);
+  }
+  assert.equal(decoder.commitLetter(), null);
+  assert.deepEqual(decoder.drainPending(), []);
+});
+
+test("losing the hand or switching poses immediately invalidates the old candidate", () => {
+  const decoder = new TemporalDecoder({ autoCommit: false });
+  for (let i = 0; i < 10; i++) decoder.push(P("A"), i * 34);
+  assert.equal(decoder.getState().tentative, "A");
+  assert.equal(decoder.push(P("B"), 340).tentative, null);
+  for (let i = 11; i < 24; i++) decoder.push(P("B"), i * 34);
+  assert.equal(decoder.getState().tentative, "B");
+  assert.equal(decoder.push(null, 816).tentative, null);
+});

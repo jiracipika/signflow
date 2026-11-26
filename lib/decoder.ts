@@ -68,14 +68,21 @@ export class TemporalDecoder implements Decoder {
   }
 
   push(pred: LetterPrediction | null, nowMs: number): DecoderState {
+    const runnerUp = pred ? Math.max(0, ...Object.entries(pred.probabilities)
+      .filter(([letter]) => letter !== pred.letter).map(([, score]) => score)) : 0;
     const valid =
       pred !== null &&
       pred.letter.length === 1 &&
       /[A-Z]/.test(pred.letter) &&
-      pred.confidence >= this.cfg.minConfidence;
+      pred.confidence >= this.cfg.minConfidence &&
+      pred.confidence - runnerUp >= 0.12;
 
     if (!valid) {
       this.nullCount++;
+      this.tentative = null;
+      this.tentativeConfidence = 0;
+      this.settledCount = 0;
+      this.tentativeSinceMs = null;
       if (this.nullCount >= LOST_AFTER) {
         this.tracking = "lost";
         this.window = [];
@@ -151,6 +158,13 @@ export class TemporalDecoder implements Decoder {
       bestN * 2 > this.window.length && // strict majority (no flicker ties)
       bestLetter !== this.awaitingChange
     ) {
+      if (pred!.letter !== bestLetter) {
+        this.tentative = null;
+        this.tentativeConfidence = 0;
+        this.settledCount = 0;
+        this.tentativeSinceMs = null;
+        return this.getState();
+      }
       if (this.tentative === bestLetter) {
         this.settledCount++;
       } else {
@@ -165,6 +179,7 @@ export class TemporalDecoder implements Decoder {
           (this.tentativeSinceMs !== null && nowMs - this.tentativeSinceMs >= this.cfg.autoCommitMs);
       if (this.cfg.autoCommit && holdComplete) {
         this.pending.push(this.tentative);
+        this.tentativeConfidence = 0;
         // hold-gate: this letter cannot re-arm until the signal changes
         this.awaitingChange = this.tentative;
         this.tentative = null;

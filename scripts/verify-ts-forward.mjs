@@ -2,6 +2,7 @@
 // Verifies the exported JSON model through the REAL TypeScript forward pass
 // (lib/model.ts predictFeatures) on the held-out test split.
 import { readFileSync } from "node:fs";
+import { TemporalDecoder } from "../lib/decoder.ts";
 import { predictFeatures } from "../lib/model.ts";
 
 function loadNpy(path) {
@@ -35,14 +36,8 @@ function loadNpy(path) {
 const m = JSON.parse(readFileSync("public/models/asl-static-v1.json", "utf8"));
 const X = loadNpy("/tmp/signflow-data/X_test.npy");
 const y = loadNpy("/tmp/signflow-data/y_test.npy");
-const letters = m.letters;
-
-const staticIdx = new Map();
-let k = 0;
-for (let i = 0; i < 26; i++) {
-  const c = String.fromCharCode(65 + i);
-  if (c !== "J" && c !== "Z") staticIdx.set(i, k++);
-}
+const letters = "ABCDEFGHIKLMNOPQRSTUVWXY";
+if (m.letters.join("") !== letters) throw new Error("Unexpected static model class order");
 
 // X_test ships pre-standardized with the DATASET's mean/std (Siruyy), but the
 // exported model standardizes with its own raw-space training stats — so raw
@@ -53,18 +48,27 @@ const dstd = loadNpy("/tmp/signflow-data/std.npy").data;
 let correct = 0,
   total = 0;
 const confusion = {};
+let accepted = 0;
+let acceptedCorrect = 0;
 for (let i = 0; i < X.shape[0]; i++) {
   const feat = X.data.slice(i * 86, (i + 1) * 86).map(
     (v, j) => v * dstd[j] + dmean[j]
   );
   const yi = y.data[i];
-  if (!staticIdx.has(yi)) continue;
-  const truth = letters[staticIdx.get(yi)];
-  const pred = predictFeatures(feat, m).letter;
-  if (pred === truth) correct++;
+  const truth = String.fromCharCode(65 + yi);
+  if (!letters.includes(truth)) continue;
+  const prediction = predictFeatures(feat, m);
+  if (prediction.letter === truth) correct++;
   else {
-    const key = `${truth}->${pred}`;
+    const key = `${truth}->${prediction.letter}`;
     confusion[key] = (confusion[key] ?? 0) + 1;
+  }
+  const decoder = new TemporalDecoder({ autoCommit: true });
+  for (let frame = 0; frame < 24; frame++) decoder.push(prediction, frame * 34);
+  const [commit] = decoder.drainPending();
+  if (commit) {
+    accepted++;
+    if (commit === truth) acceptedCorrect++;
   }
   total++;
 }
@@ -77,3 +81,4 @@ const top = Object.entries(confusion)
   .sort((a, b) => b[1] - a[1])
   .slice(0, 12);
 console.log("top confusions:", top);
+console.log(`Decoder on repeated samples: ${acceptedCorrect}/${accepted} accepted predictions correct; ${total - accepted} withheld`);

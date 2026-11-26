@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wasmSrc = path.join(root, "node_modules", "@mediapipe", "tasks-vision", "wasm");
 const dest = path.join(root, "public", "mediapipe", "wasm");
 
-rmSync(path.join(root, "public", "mediapipe"), { recursive: true, force: true });
+rmSync(dest, { recursive: true, force: true });
 mkdirSync(dest, { recursive: true });
 for (const f of [
   "vision_wasm_internal.js",

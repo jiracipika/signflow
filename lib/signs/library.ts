@@ -1,11 +1,4 @@
-// Word-sign library: a browsable set of common words, each marked with how
-// SignFlow currently renders it and where to learn the real sign. Static data
-// only — statuses are resolved at render time from the sign store.
-//
-// Honest-limitations note, which the UI repeats: built-in statuses are
-// approximate static one-shape poses (shape only, no motion, not certified
-// ASL); taught statuses replay recordings made on the Teach page; everything
-// else fingerspells.
+// ASL reference entries with local recognition and playback availability.
 
 import { listSigns } from "./custom-signs.ts";
 
@@ -25,7 +18,7 @@ export type LibraryEntry = {
 const ENTRIES: (Omit<LibraryEntry, "fingerspelling"> & { word: string })[] = [
   { word: "HELLO", note: "Flat hand salutes from the temple outward.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/h/hello.htm" },
   { word: "THANK YOU", note: "Flat hand touches the chin, moves forward and down.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/t/thankyou.htm" },
-  { word: "YES", note: "Fist nods up and down like a head saying yes.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/y/yes.htm" },
+  { word: "YES", note: "Bend the wrist to nod an S handshape.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/y/yes.htm" },
   { word: "NO", note: "Index and middle fingers tap down onto the thumb.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/n/no.htm" },
   { word: "PLEASE", note: "Flat palm circles on the chest.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/p/please.htm" },
   { word: "SORRY", note: "Fist circles over the heart.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/s/sorry.htm" },
@@ -34,9 +27,9 @@ const ENTRIES: (Omit<LibraryEntry, "fingerspelling"> & { word: string })[] = [
   { word: "GOODNIGHT", note: "Good + night: hands come together as the sun sets.", referenceUrl: "https://www.signingsavvy.com/sign/GOODNIGHT" },
   { word: "HELP", note: "Fist with thumb up rests on flat palm, lifts together.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/h/help.htm" },
   { word: "STOP", note: "Flat hand chops down onto the open palm.", referenceUrl: "https://www.signingsavvy.com/sign/STOP" },
-  { word: "MORE", note: "Flat hands tap fingertips together (often a first sign).", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/m/more.htm" },
+  { word: "MORE", note: "Bring the fingertips of two flattened O handshapes together.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/m/more.htm" },
   { word: "FINISH", note: "Open hands flip outward — done, all gone.", referenceUrl: "https://www.signingsavvy.com/sign/FINISH" },
-  { word: "WATER", note: "W hand taps the chin.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/w/water.htm" },
+  { word: "WATER", note: "Form a W with your dominant hand and tap the index finger near your mouth twice.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/w/water.htm" },
   { word: "EAT", note: "Flattened O hand taps the lips.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/e/eat.htm" },
   { word: "DRINK", note: "C hand tips toward the mouth.", referenceUrl: "https://www.signingsavvy.com/sign/DRINK" },
   { word: "LEARN", note: "Hand lifts information from palm to the head.", referenceUrl: "https://www.lifeprint.com/asl101/pages-signs/l/learn.htm" },
@@ -49,7 +42,7 @@ const ENTRIES: (Omit<LibraryEntry, "fingerspelling"> & { word: string })[] = [
   { word: "KNOW", note: "Fingertips tap the side of the forehead.", referenceUrl: "https://www.signingsavvy.com/sign/KNOW" },
 ];
 
-export type LibraryRow = LibraryEntry & { status: LibraryStatus };
+export type LibraryRow = LibraryEntry & { status: LibraryStatus; playback: "recording" | "fingerspelling" };
 
 /** All library entries with the live status resolved from the sign store. */
 export function libraryRows(): LibraryRow[] {
@@ -63,6 +56,7 @@ export function libraryRows(): LibraryRow[] {
       fingerspelling: word.split("").join(" "),
       note,
       referenceUrl,
+      playback: s?.kind === "dynamic" ? "recording" : "fingerspelling",
       status: !s ? "fingerspelled" : s.builtin ? "builtin" : "taught",
     };
   });

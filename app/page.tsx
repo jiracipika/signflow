@@ -1,142 +1,44 @@
-"use client";
-
-// Home: typographic hero + a live "now spelling" demo strip that types
-// H-E-L-L-O letter by letter — showing what the app does instead of
-// describing it. Reduced motion: renders the full word statically.
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MotionConfig, motion, staggerContainer, fadeUp } from "@/components/motion-kit";
+import SignAvatar from "@/components/SignAvatar";
+import poseData from "@/public/models/asl-poses-v1.json";
 
-const DEMO = "HELLO";
+const helloPose = Array.from({ length: 21 }, (_, i) => {
+  const { lm } = poseData.poses.H;
+  return { x: lm[i * 3], y: lm[i * 3 + 1], z: lm[i * 3 + 2] };
+});
+
+const activities = [
+  { href: "/practice", title: "Practice", description: "Drill individual handshapes and read fingerspelled words." },
+  { href: "/library", title: "Sign library", description: "Look up ASL signs and find reference videos." },
+  { href: "/teach", title: "Teach a sign", description: "Record a handshape or motion for SignFlow to match." },
+];
 
 export default function Home() {
-  const [shown, setShown] = useState(0);
-
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // defer both branches out of the effect body (react-hooks/set-state-in-effect)
-    const init = setTimeout(() => setShown(reduce ? DEMO.length : 0), 0);
-    const id = reduce
-      ? null
-      : setInterval(() => {
-          setShown((n) => (n >= DEMO.length ? 0 : n + 1));
-        }, 700);
-    return () => {
-      clearTimeout(init);
-      if (id) clearInterval(id);
-    };
-  }, []);
-
   return (
-    <MotionConfig reducedMotion="user">
-      <motion.div variants={staggerContainer} initial="hidden" animate="show">
-        <motion.div
-          variants={fadeUp}
-          className="card"
-          style={{ textAlign: "center", padding: "40px 20px 32px" }}
-        >
-        <h1 style={{ margin: "0 0 10px", fontSize: "clamp(2.4rem, 6vw, 3.4rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
-          Say it with your hands.
-        </h1>
-        <p className="muted" style={{ fontSize: 18, margin: "0 auto 22px", maxWidth: "46ch" }}>
-          SignFlow reads your camera, recognizes the ASL alphabet on-device, and
-          helps you spell words letter by letter.
-        </p>
-        <div className="btn-row" style={{ justifyContent: "center" }}>
-          <Link href="/live" className="btn primary big" style={{ textDecoration: "none" }}>
-            Start signing
-          </Link>
-          <Link href="/avatar" className="btn big ghost" style={{ textDecoration: "none" }}>
-            Watch the avatar
-          </Link>
+    <div className="signflow-home">
+      <section className="home-hero">
+        <div className="home-intro">
+          <h1>Fingerspell.<br />See it in text.</h1>
+          <p>Use your camera to read ASL fingerspelling, review each letter, and build a message. Camera processing runs on your device.</p>
+          <div className="btn-row">
+            <Link href="/live" className="btn primary">Open live camera</Link>
+            <Link href="/avatar" className="btn">Watch the avatar</Link>
+          </div>
         </div>
-        <p className="small muted" style={{ marginTop: 16, marginBottom: 0 }}>
-          Best in Chrome or Safari with a front camera. Nothing ever leaves your device.
-        </p>
-        </motion.div>
-
-        <motion.div variants={fadeUp} className="card" style={{ textAlign: "center" }}>
-          <p className="small muted" style={{ marginTop: 0, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 12 }}>
-          Now spelling
-        </p>
-        <div
-          aria-hidden="true"
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "clamp(2.2rem, 8vw, 3.2rem)",
-            fontWeight: 700,
-            letterSpacing: "0.18em",
-            minHeight: "1.3em",
-            display: "flex",
-            justifyContent: "center",
-            gap: "0.12em",
-          }}
-        >
-          {DEMO.split("").map((ch, i) => (
-            <span
-              key={i}
-              style={{
-                opacity: i < shown ? 1 : 0.12,
-                color: i < shown ? "var(--accent)" : "var(--muted)",
-                transition: "opacity 240ms var(--ease-out), color 240ms var(--ease-out)",
-              }}
-            >
-              {ch}
-            </span>
-          ))}
-        </div>
-        <p className="small muted" style={{ marginBottom: 0 }}>
-          Fingerspelling, spelled back to you — the avatar page shows every hand shape.
-        </p>
-        </motion.div>
-
-        <motion.div variants={fadeUp} className="card">
-          <h2>What it recognizes</h2>
-          <p>
-            <strong>the full ASL alphabet</strong> — 24 static letters plus the
-            motion-based J and Z, recognized by tracing the fingertip path (manual
-            buttons remain as a fallback) — plus single-shape word signs like
-            I LOVE YOU, YES, and NO, and <strong>anything you teach it</strong> on the
-            Teach page.
-          </p>
-          <p>
-            The avatar can also <strong>sign back to you</strong> — fingerspelling with
-            natural letter flow. Browse common words in the{" "}
-            <Link href="/library">sign library</Link>, or drill them in{" "}
-            <Link href="/practice?tab=words">word practice</Link>: watch a word
-            being signed, then type what you saw.
-          </p>
-          <p>
-            This is a <strong>fingerspelling assistant, not a full ASL translator</strong>:
-            it does not recognize grammar, facial expressions, or continuous signing.
-          </p>
-        </motion.div>
-
-        <motion.div variants={fadeUp} className="card">
-          <h2>Private by construction</h2>
-          <p>
-            Camera frames are processed <strong>entirely on your device</strong> via
-            WebAssembly. No video or images are uploaded, recorded, or logged — ever.
-            Transcripts stay in memory unless you save them, and you can wipe
-            everything in <Link href="/settings">Settings</Link>.
-          </p>
-        </motion.div>
-
-        <motion.div variants={fadeUp} className="card">
-          <h2>Honest limitations</h2>
-          <p>
-            Recognition depends on lighting, angle, and how closely your hand shapes
-            match the training data (one contributor&apos;s hand). It works best for
-            deliberate, paused fingerspelling — not continuous signing. Some letters
-            (M/N/T, I/Y) occasionally confuse. J and Z are traced as movements —
-            they need a deliberate finger path, so a sloppy or fast trace may miss
-            (manual buttons remain). Built-in word signs (I LOVE YOU, YES, NO) are
-            approximate single hand shapes — the real signs add motion, so treat
-            them as hints and learn from the library&apos;s references.
-          </p>
-        </motion.div>
-      </motion.div>
-    </MotionConfig>
+        <figure className="home-demo">
+          <SignAvatar currentPose={helloPose} label="H" />
+          <figcaption>Fingerspelling preview <span>H E L L O</span></figcaption>
+        </figure>
+      </section>
+      <section className="home-activities" aria-label="Practice and reference">
+        {activities.map(({ href, title, description }) => (
+          <Link key={href} href={href} className="card">
+            <h2>{title} <span aria-hidden="true">↗</span></h2>
+            <p>{description}</p>
+          </Link>
+        ))}
+      </section>
+      <p className="home-scope">Live recognition works best with one hand in view and a brief hold on each letter. Use Word signs to match your own recordings.</p>
+    </div>
   );
 }
