@@ -11,6 +11,7 @@ import { loadSigns, saveCustom, builtinSigns } from "./custom-signs.ts";
 export type BackupSign = {
   label: string;
   kind: SignKind;
+  wristMotion?: true;
   /** static: array of single-frame prototypes (1 frame of 63 numbers);
    *  dynamic: array of sequences, each exactly 32 frames of 63 numbers. */
   prototypes: number[][][];
@@ -48,7 +49,7 @@ const MAX_LABEL = 40;
 export function buildBackup(): SignBackup {
   const signs = loadSigns()
     .filter((s) => !s.builtin)
-    .map(({ label, kind, prototypes }) => ({ label, kind, prototypes }));
+    .map(({ label, kind, prototypes, wristMotion }) => ({ label, kind, prototypes, ...(wristMotion ? { wristMotion } : {}) }));
   return {
     version: 1,
     kind: "signflow-backup",
@@ -76,13 +77,15 @@ function signLabel(v: unknown): string {
 function validateSign(v: unknown): string | null {
   if (typeof v !== "object" || v === null || Array.isArray(v))
     return "sign must be an object";
-  const s = v as { label?: unknown; kind?: unknown; prototypes?: unknown };
+  const s = v as { label?: unknown; kind?: unknown; prototypes?: unknown; wristMotion?: unknown };
   if (typeof s.label !== "string" || s.label.trim().length === 0)
     return "label must be a non-empty string";
   if (s.label.length > MAX_LABEL)
     return `label longer than ${MAX_LABEL} characters`;
   if (s.kind !== "static" && s.kind !== "dynamic")
     return 'kind must be "static" or "dynamic"';
+  if (s.wristMotion !== undefined && (s.wristMotion !== true || s.kind !== "dynamic"))
+    return "invalid wrist motion flag";
   if (!Array.isArray(s.prototypes) || s.prototypes.length === 0)
     return "prototypes must be a non-empty array";
   const frames = s.kind === "static" ? 1 : SEQ_LEN;
@@ -134,6 +137,7 @@ export function parseBackup(raw: string): ParseResult {
     label: s.label,
     kind: s.kind,
     prototypes: s.prototypes,
+    ...(s.wristMotion ? { wristMotion: s.wristMotion } : {}),
   }));
   return {
     ok: true,
@@ -175,7 +179,7 @@ export function importBackup(backup: SignBackup): ImportReport {
       report.rejected.push({ label: sign.label, reason: "duplicate label in backup" });
       continue;
     }
-    toAdd.push({ label: sign.label, kind: sign.kind, builtin: false, prototypes: sign.prototypes });
+    toAdd.push({ label: sign.label, kind: sign.kind, builtin: false, prototypes: sign.prototypes, ...(sign.wristMotion ? { wristMotion: sign.wristMotion } : {}) });
     report.imported.push(sign.label);
   }
   if (toAdd.length > 0) saveCustom([...userSigns, ...toAdd]);

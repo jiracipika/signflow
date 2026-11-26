@@ -9,10 +9,10 @@ import type { Transcript, TranscriptAction } from "@/lib/types";
 import { buildDefaultSuggester } from "@/lib/dictionary";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
 import { useSettings, addTranscript } from "@/lib/settings";
-import { matchStatic, matchDynamic } from "@/lib/signs/custom-signs";
+import { matchStatic, matchDynamic, type SignMatch } from "@/lib/signs/custom-signs";
 import { listSigns } from "@/lib/signs/custom-signs";
 import { MotionLetterWatcher } from "@/lib/signs/motion-letters";
-import { mirrorLandmarks } from "@/lib/features";
+import { recognitionLandmarks } from "@/lib/features";
 import type { Landmark } from "@/lib/types";
 import { MotionConfig, motion } from "@/components/motion-kit";
 
@@ -33,7 +33,13 @@ export default function LivePage() {
   const [notice, setNotice] = useState("");
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [ttsSupported, setTtsSupported] = useState(false);
-  const [signMatch, setSignMatch] = useState<{ label: string; distance: number } | null>(null);
+  const [signMatch, setSignMatch] = useState<SignMatch | null>(null);
+  const [motionMessage, setMotionMessage] = useState("");
+  const [wordMode, setWordMode] = useState(false);
+  const [motionLetter, setMotionLetter] = useState<"J" | "Z" | null>(null);
+  const staticMatchRef = useRef<{ label: string; since: number } | null>(null);
+  const motionHandRef = useRef<"Left" | "Right" | null>(null);
+  const motionInterruptedRef = useRef(false);
   const [recordingMotion, setRecordingMotion] = useState(false);
   const recordingMotionRef = useRef(false);
   const motionBufRef = useRef<Landmark[][]>([]);
@@ -73,7 +79,7 @@ export default function LivePage() {
 
   // do we have any word-signs (static or dynamic) to look for?
   useEffect(() => {
-    const id = setTimeout(() => setHasSigns(listSigns().length > 0), 0);
+    const id = setTimeout(() => setHasSigns(listSigns().some((sign) => sign.kind === "dynamic" && !sign.needsRecording)), 0);
     return () => clearTimeout(id);
   }, []);
 
@@ -96,17 +102,32 @@ export default function LivePage() {
       landmarksRef.current = frame?.landmarks ?? null;
       const d = decoderRef.current;
       if (!d || !modelReady || editingRef.current) return;
-      // Left-handed signers: mirror the recognition input onto the right-hand
-      // geometry the model (and the built-in sign templates) were trained on.
-      // The overlay keeps the raw landmarks so the skeleton tracks the real
-      // hand on screen.
-      const lmRec =
-        frame && frame.handedness === "Left"
-          ? mirrorLandmarks(frame.landmarks)
-          : frame?.landmarks;
+      const lmRec = frame ? recognitionLandmarks(frame) : null;
       if (recordingMotionRef.current) {
-        if (frame) motionBufRef.current.push(lmRec ?? frame.landmarks);
-        d.reset();
+        if (!frame || (motionHandRef.current && motionHandRef.current !== frame.handedness)) {
+          if (motionBufRef.current.length) motionInterruptedRef.current = true;
+          return;
+        }
+        motionHandRef.current = frame.handedness;
+        if (motionBufRef.current.length < 600) motionBufRef.current.push(lmRec!);
+        else motionInterruptedRef.current = true;
+        return;
+      }
+      if (wordMode) {
+        if (!frame || !lmRec) {
+          staticMatchRef.current = null;
+          setSignMatch((match) => match?.kind === "dynamic" ? match : null);
+          return;
+        }
+        if (frameCountRef.current++ % 3 !== 0) return;
+        const match = matchStatic(lmRec);
+        const previous = staticMatchRef.current;
+        if (!match || previous?.label !== match.label) {
+          staticMatchRef.current = match ? { label: match.label, since: frame.timestampMs } : null;
+          setSignMatch((current) => current?.kind === "dynamic" ? current : null);
+        } else if (frame.timestampMs - previous.since >= 250) {
+          setSignMatch((current) => current?.kind === "dynamic" || current?.label === match.label ? current : match);
+        }
         return;
       }
       // movement letters first: a finished J/Z trace commits directly (like
@@ -115,15 +136,19 @@ export default function LivePage() {
       if (lmRec && frame) {
         const ml = motionWatcherRef.current.feed(lmRec, frame.timestampMs);
         if (ml) {
-          apply({ type: "letter", letter: ml });
+          if (settings.autoCommit) apply({ type: "letter", letter: ml });
+          else setMotionLetter(ml);
           d.reset();
           top3Ref.current = [];
-          setSignMatch(null);
+          setTop3([]);
+          setDecoderState({ tentative: null, tentativeConfidence: 0, tracking: "tracking" });
           return;
         }
       } else {
         motionWatcherRef.current.lost();
       }
+      if (motionLetter) return;
+      if (!frame) setTop3((current) => current.length ? [] : current);
       const pred = lmRec ? predictLandmarks(lmRec) : null;
       const state = d.push(pred, frame?.timestampMs ?? performance.now());
       if (pred) {
@@ -135,14 +160,6 @@ export default function LivePage() {
         top3Ref.current = [];
       }
 
-      if (lmRec) {
-        // static word-sign check every 5th frame (cheap nearest-prototype)
-        if (!recordingMotionRef.current && frameCountRef.current++ % 5 === 0) {
-          const m = matchStatic(lmRec);
-          setSignMatch(m ? { label: m.label, distance: m.distance } : null);
-        }
-      }
-      if (!frame) setSignMatch(null);
       // auto-commit pending letters
       const pending = d.drainPending();
       if (pending.length) {
@@ -171,7 +188,7 @@ export default function LivePage() {
         setTop3([...top3Ref.current]);
       }
     },
-    [modelReady, apply]
+    [modelReady, apply, settings.autoCommit, wordMode, motionLetter]
   );
 
   const { videoRef, status, error, start, stop: stopTracking, fps } = useHandTracking({
@@ -190,17 +207,24 @@ export default function LivePage() {
     recordingMotionRef.current = false;
     motionBufRef.current = [];
     setRecordingMotion(false);
+    setMotionLetter(null);
+    setMotionMessage("");
+    staticMatchRef.current = null;
   };
 
   const commitSign = () => {
-    if (signMatch && signMatch.distance < 0.9) {
-      apply({ type: "manual", text: (transcript.text + " " + signMatch.label).trim() + " " });
+    if (signMatch && !editing && running) {
+      setTranscript((current) => current.apply({ type: "manual", text: (current.text + " " + signMatch.label).trim() + " " }));
       decoderRef.current?.reset();
       setSignMatch(null);
     }
   };
 
   const startMotionRecording = () => {
+    setMotionMessage("");
+    staticMatchRef.current = null;
+    motionHandRef.current = null;
+    motionInterruptedRef.current = false;
     motionBufRef.current = [];
     recordingMotionRef.current = true;
     setRecordingMotion(true);
@@ -212,16 +236,39 @@ export default function LivePage() {
   const stopMotionRecording = () => {
     recordingMotionRef.current = false;
     setRecordingMotion(false);
-    const m = matchDynamic(motionBufRef.current);
-    if (m && m.distance < 0.16) {
-      apply({ type: "manual", text: (transcript.text + " " + m.label).trim() + " " });
-    } else if (m) {
-      setSignMatch({ label: `no match (best ${m.label} ${m.distance.toFixed(2)})`, distance: 1 });
-    }
+    const interrupted = motionInterruptedRef.current;
+    const match = interrupted ? null : matchDynamic(motionBufRef.current);
+    setSignMatch(match);
+    setMotionMessage(interrupted ? "Keep the same hand in view throughout the recording." :
+      match ? "" : "No clear motion match. Try again or record a sample in Teach.");
     motionBufRef.current = [];
   };
 
   const frameCountRef = useRef(0);
+
+  const changeRecognitionMode = (words: boolean) => {
+    setWordMode(words);
+    decoderRef.current?.reset();
+    motionWatcherRef.current.reset();
+    staticMatchRef.current = null;
+    recordingMotionRef.current = false;
+    motionBufRef.current = [];
+    setRecordingMotion(false);
+    setMotionMessage("");
+    setMotionLetter(null);
+    setSignMatch(null);
+    setTop3([]);
+    setDecoderState({ tentative: null, tentativeConfidence: 0, tracking: "searching" });
+  };
+
+  const commitTentative = useCallback(() => {
+    if (wordMode || editingRef.current) return;
+    const letter = motionLetter ?? decoderRef.current?.commitLetter();
+    if (letter) {
+      apply({ type: "letter", letter, source: "manual" });
+      setMotionLetter(null);
+    }
+  }, [apply, motionLetter, wordMode]);
 
   // keyboard shortcuts (desktop): Enter=commit, Space=space, Backspace=delete,
   // Ctrl/Cmd+Z=undo
@@ -233,9 +280,7 @@ export default function LivePage() {
       if (e.altKey || e.shiftKey) return;
       if (e.key === "Enter") {
         e.preventDefault();
-        const d = decoderRef.current;
-        const letter = d?.commitLetter();
-        if (letter) apply({ type: "letter", letter, source: "manual" });
+        commitTentative();
       } else if (e.key === " ") {
         e.preventDefault();
         apply({ type: "space" });
@@ -249,14 +294,7 @@ export default function LivePage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [apply, editing]);
-
-  const commitTentative = () => {
-    const d = decoderRef.current;
-    if (!d) return;
-    const letter = d.commitLetter();
-    if (letter) apply({ type: "letter", letter, source: "manual" });
-  };
+  }, [apply, editing, commitTentative]);
 
   const copyText = async () => {
     try {
@@ -286,12 +324,14 @@ export default function LivePage() {
   const running = status === "running";
   const busy = status === "requesting" || status === "model-loading";
   const wordCount = transcript.text.trim() ? transcript.text.trim().split(/\s+/).length : 0;
+  const readyLetter = motionLetter ?? decoderState.tentative;
   const statusLabel =
     status === "idle" ? "Camera off"
     : status === "requesting" ? "Requesting camera…"
     : status === "denied" ? "Camera permission denied"
     : status === "model-loading" ? "Loading hand tracking…"
     : status === "error" ? "Camera needs attention"
+    : wordMode ? "Looking for taught signs"
     : decoderState.tracking === "tracking" ? "Hand detected"
     : decoderState.tracking === "searching" ? "Looking for a hand…"
     : "Tracking lost — show your hand";
@@ -309,20 +349,22 @@ export default function LivePage() {
       >
       <header className="workspace-heading">
         <div>
-          <span className="eyebrow">YOUR PERSONAL SIGNING STUDIO</span>
-          <h1>A little motion.<br /><span>A lot to say.</span></h1>
-          <p>Turn your fingerspelling into words. Find your rhythm, shape a letter, and watch your message grow.</p>
+          <h1>Live recognition</h1>
+          <p>Read fingerspelled letters or match a sign you recorded.</p>
         </div>
         <span className={`privacy-pill ${running ? "is-live" : ""}`}>
           <span /> {running ? "Camera stays on this device" : "Private, on-device recognition"}
         </span>
       </header>
       <div className="studio-toolbar">
-        <div className="studio-mode" role="group" aria-label="Letter entry mode">
-          <button aria-pressed={settings.autoCommit} onClick={() => updateSettings({ autoCommit: true })}>Automatic</button>
-          <button aria-pressed={!settings.autoCommit} onClick={() => updateSettings({ autoCommit: false })}>Manual</button>
+        <div className="studio-mode" role="group" aria-label="Recognition mode">
+          <button aria-pressed={!wordMode} onClick={() => changeRecognitionMode(false)}>Fingerspelling</button>
+          <button aria-pressed={wordMode} onClick={() => changeRecognitionMode(true)}>Word signs</button>
         </div>
-        <span className="small muted">{settings.autoCommit ? "Steady letters add themselves" : "Review each letter, then add it"}</span>
+        {!wordMode && <div className="studio-mode" role="group" aria-label="Letter entry mode">
+          <button aria-pressed={settings.autoCommit} onClick={() => updateSettings({ autoCommit: true })}>Automatic</button>
+          <button aria-pressed={!settings.autoCommit} onClick={() => updateSettings({ autoCommit: false })}>Review first</button>
+        </div>}
         <a className="studio-settings" href="/settings">Tune recognition ↗</a>
       </div>
       <div className="live-layout">
@@ -330,7 +372,7 @@ export default function LivePage() {
       <section className="camera-column" aria-label="Camera">
         <div className={`camera-wrap studio-camera ${running ? "is-running" : ""}`}>
           <div className="camera-label"><span className={running ? "live-dot" : ""} />{running ? "LIVE CAMERA" : "CAMERA PREVIEW"}</div>
-          {running && <div className="camera-coach">{editing ? "Recognition paused while you edit" : decoderState.tracking === "tracking" ? "Hand in view · keep your movements natural" : "Bring your signing hand into the frame"}</div>}
+          {running && <div className="camera-coach">{recordingMotion ? "Keep the same hand in view, then stop to review" : editing ? "Recognition paused while you edit" : wordMode ? "Keep your signing hand in view" : decoderState.tracking === "tracking" ? "Hand in view" : "Bring your signing hand into the frame"}</div>}
           {!running && <div className="camera-reticle" aria-hidden="true" /> }
           <video
             ref={videoRef}
@@ -423,9 +465,9 @@ export default function LivePage() {
 
         <details className="studio-help"><summary>Quick signing tips</summary>
         <div className="studio-guide">
-          <div><span>01</span><strong>Frame your hand</strong><p>Keep your wrist and fingertips in view, with light in front of you.</p></div>
-          <div><span>02</span><strong>Find your rhythm</strong><p>Hold a letter briefly. Relax your hand between repeated letters.</p></div>
-          <div><span>03</span><strong>Make it yours</strong><p>Add spaces, choose a suggestion, or edit your message anytime.</p></div>
+          <div><strong>Frame your hand</strong><p>Keep your wrist and fingertips in view, with light in front of you.</p></div>
+          <div><strong>Find your rhythm</strong><p>Hold a letter briefly. Relax your hand between repeated letters.</p></div>
+          <div><strong>Make it yours</strong><p>Add spaces, choose a suggestion, or edit your message anytime.</p></div>
         </div>
         <div className="studio-tip"><span aria-hidden="true">✦</span><p>New to fingerspelling? <a href="/practice">Warm up in Practice ↗</a></p></div>
         </details>
@@ -440,18 +482,18 @@ export default function LivePage() {
 
       {/* right: recognition + text */}
       <section className="studio-output" aria-label="Text">
-        <div className="card">
+        {!wordMode && <div className="card">
           <div className="panel-heading"><h2>Recognition</h2><span className="panel-tag">{settings.autoCommit ? "AUTO ADD" : "MANUAL ADD"}</span></div>
           <div className="tentative-letter">
-            {decoderState.tentative ? (
+            {readyLetter ? (
               <>
-                <span aria-label={`Tentative letter ${decoderState.tentative}`}>
-                  {decoderState.tentative}
+                <span aria-label={`Tentative letter ${readyLetter}`}>
+                  {readyLetter}
                 </span>
                 <span className="conf">
                   Letter ready
                   <br />
-                  <span className="small muted">{settings.autoCommit ? "Hold briefly to add" : "Tap Add letter below"}</span>
+                  <span className="small muted">{settings.autoCommit ? "Hold briefly to add" : "Confirm the letter before adding it"}</span>
                 </span>
               </>
             ) : (
@@ -482,11 +524,11 @@ export default function LivePage() {
             className="btn primary"
             style={{ width: "100%" }}
             onClick={commitTentative}
-            disabled={!running || !decoderState.tentative || editing}
+            disabled={!running || !readyLetter || editing}
           >
             Add letter
           </button>
-          {top3.length > 0 && (
+          {!editing && !motionLetter && top3.length > 1 && (
             <div className="btn-row" style={{ marginTop: 6 }}>
               <span className="small muted" style={{ alignSelf: "center" }}>
                 Also seeing:
@@ -496,7 +538,7 @@ export default function LivePage() {
                   key={l}
                   className="btn"
                   style={{ minHeight: 40, padding: "6px 12px" }}
-                  onClick={() => apply({ type: "letter", letter: l, source: "manual" })}
+                  onClick={() => { decoderRef.current?.commitLetter(); apply({ type: "letter", letter: l, source: "manual" }); }}
                   aria-label={`Insert letter ${l}`}
                 >
                   {l} <span className="small muted">{Math.round(p * 100)}%</span>
@@ -508,15 +550,54 @@ export default function LivePage() {
             {settings.autoCommit ? "A steady hold adds a letter automatically." : "Press Add letter or Enter when the shape is ready."}
             {" "}For a double letter, relax your hand briefly and sign it again.
           </p>
-        </div>
+        </div>}
 
-
-
+        {wordMode && (
+          <div className="card word-signs">
+            <h2>Sign match</h2>
+            {recordingMotion ? (
+              <>
+                <p style={{ color: "var(--warn)" }}>● Recording motion…</p>
+                <button className="btn primary" style={{ width: "100%" }} onClick={stopMotionRecording}>
+                  Stop &amp; match
+                </button>
+              </>
+            ) : signMatch ? (
+              <>
+                <p style={{ margin: 0 }}>
+                  <strong style={{ fontSize: 24 }}>{signMatch.label}</strong>
+                  <span className="small muted"> · {signMatch.builtin ? "Built-in handshape" : "Your recording"}</span>
+                </p>
+                <button className="btn primary" style={{ width: "100%", marginTop: 8 }} onClick={commitSign} disabled={editing || !running}>
+                  Commit &ldquo;{signMatch.label}&rdquo;
+                </button>
+              </>
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>
+                {motionMessage || (running ? "Hold a taught handshape or record a motion to look for a match." : "Start the camera to look for a sign.")}
+              </p>
+            )}
+            <div className="btn-row" style={{ marginTop: 10 }}>
+              <button className="btn" onClick={startMotionRecording} disabled={!running || recordingMotion || editing || !hasSigns}>
+                Record motion sign
+              </button>
+            </div>
+            <p className="small muted" style={{ marginBottom: 0 }}>
+              Teach your own in <a href="/teach">Teach</a>.
+            </p>
+          </div>
+        )}
         <div className="card">
           <div className="panel-heading"><h2>Your message</h2><span className="panel-tag">{wordCount} {wordCount === 1 ? "WORD" : "WORDS"}</span></div>
-          <div className="message-actions"><button className="btn" disabled={editing} onClick={() => {
+          <div className="message-actions"><button className="btn" disabled={editing || recordingMotion} onClick={() => {
             editingRef.current = true;
             decoderRef.current?.reset();
+            motionWatcherRef.current.reset();
+            setMotionLetter(null);
+            staticMatchRef.current = null;
+            setSignMatch(null);
+            setTop3([]);
+            setDecoderState({ tentative: null, tentativeConfidence: 0, tracking: "searching" });
             setEditing(true);
           }}>Edit text</button><span className="small muted">{editing ? "Recognition is paused" : "Built one letter at a time"}</span></div>
           <div className="transcript-box" aria-live="polite">
@@ -612,41 +693,6 @@ export default function LivePage() {
             Suggestions are optional — tapping one replaces only the current word.
           </p>
         </div>
-        {(hasSigns || recordingMotion) && (
-          <details className="card word-signs">
-            <summary>Word signs <span className="small muted">Custom shapes &amp; motions</span></summary>
-            {recordingMotion ? (
-              <>
-                <p style={{ color: "var(--warn)" }}>● Recording motion…</p>
-                <button className="btn primary" style={{ width: "100%" }} onClick={stopMotionRecording}>
-                  Stop &amp; match
-                </button>
-              </>
-            ) : signMatch && signMatch.distance < 0.9 ? (
-              <>
-                <p style={{ margin: 0 }}>
-                  <strong style={{ fontSize: 24 }}>{signMatch.label}</strong>
-                  <span className="small muted"> · match {signMatch.distance.toFixed(2)} (lower = better, uncalibrated)</span>
-                </p>
-                <button className="btn primary" style={{ width: "100%", marginTop: 8 }} onClick={commitSign}>
-                  Commit &ldquo;{signMatch.label}&rdquo;
-                </button>
-              </>
-            ) : (
-              <p className="small muted" style={{ margin: 0 }}>
-                No word sign detected. Hold an I LOVE YOU shape, or record a motion.
-              </p>
-            )}
-            <div className="btn-row" style={{ marginTop: 10 }}>
-              <button className="btn" onClick={startMotionRecording} disabled={!running || recordingMotion}>
-                Record motion sign
-              </button>
-            </div>
-            <p className="small muted" style={{ marginBottom: 0 }}>
-              Teach your own in <a href="/teach">Teach</a>.
-            </p>
-          </details>
-        )}
       </section>
       </div>
       {notice && <p className="studio-notice" role="status">{notice}</p>}

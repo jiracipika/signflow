@@ -4,6 +4,8 @@
 // Samples stay in localStorage — nothing leaves the device.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { recognitionLandmarks } from "@/lib/features";
+import type { HandFrame } from "@/lib/types";
 import { useHandTracking } from "@/lib/camera";
 import LandmarkOverlay from "@/components/LandmarkOverlay";
 import SignAvatar from "@/components/SignAvatar";
@@ -33,8 +35,16 @@ export default function TeachPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
 
+  const frameRef = useRef<HandFrame | null>(null);
   const bufRef = useRef<Landmark[][]>([]);
   const collectingRef = useRef(false);
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureHandRef = useRef<HandFrame["handedness"] | null>(null);
+  const interruptedRef = useRef(false);
+
+  useEffect(() => () => {
+    if (captureTimerRef.current !== null) clearTimeout(captureTimerRef.current);
+  }, []);
 
   useEffect(() => {
     const id = setTimeout(() => setSigns(listSigns()), 0);
@@ -49,8 +59,15 @@ export default function TeachPage() {
   }, []);
 
   const onFrame = useCallback((frame: import("@/lib/types").HandFrame | null) => {
-    if (frame) setLandmarks(frame.landmarks);
-    if (frame && collectingRef.current) bufRef.current.push(frame.landmarks);
+    frameRef.current = frame;
+    setLandmarks(frame?.landmarks ?? null);
+    if (!collectingRef.current) return;
+    if (!frame || (captureHandRef.current && captureHandRef.current !== frame.handedness)) {
+      if (bufRef.current.length) interruptedRef.current = true;
+      return;
+    }
+    captureHandRef.current = frame.handedness;
+    bufRef.current.push(recognitionLandmarks(frame));
   }, []);
 
   const { videoRef, status, start, stop } = useHandTracking({
@@ -62,24 +79,28 @@ export default function TeachPage() {
   const captureSample = () => {
     if (kind === "static") {
       // hold-pose capture: we grab the last frame when buffer has data
-      if (!landmarks) {
+      const frame = frameRef.current;
+      if (!frame || !running) {
         setMsg("No hand visible — hold your hand in frame first.");
         return;
       }
-      setSamples((s) => [...s, { frames: [landmarks] }]);
+      setSamples((s) => [...s, { frames: [recognitionLandmarks(frame)] }]);
       return;
     }
     // dynamic: record 2.5s of motion
     bufRef.current = [];
+    captureHandRef.current = null;
+    interruptedRef.current = false;
     collectingRef.current = true;
     setRecording(true);
     setMsg("Recording… make the sign now.");
-    setTimeout(() => {
+    captureTimerRef.current = setTimeout(() => {
+      captureTimerRef.current = null;
       collectingRef.current = false;
       setRecording(false);
       const frames = bufRef.current;
       bufRef.current = [];
-      if (frames.length < 8) {
+      if (interruptedRef.current || frames.length < 8) {
         setMsg("Too few frames captured — hold the hand in view the whole time.");
         return;
       }
@@ -107,7 +128,7 @@ export default function TeachPage() {
       setSigns(listSigns());
       setSamples([]);
       setLabel("");
-      setMsg(`Saved "${label.trim()}" — it now competes with letters in Sign mode.`);
+      setMsg(`Saved "${label.trim()}" — look for it under Word signs in Live.`);
     } else {
       setMsg("Save failed — check samples have hand data.");
     }
@@ -178,7 +199,16 @@ export default function TeachPage() {
           </div>
           <div className="btn-row" style={{ marginTop: 10 }}>
             {running ? (
-              <button className="btn" onClick={stop}>Stop camera</button>
+              <button className="btn" onClick={() => {
+                stop();
+                frameRef.current = null;
+                setLandmarks(null);
+                if (captureTimerRef.current !== null) clearTimeout(captureTimerRef.current);
+                captureTimerRef.current = null;
+                collectingRef.current = false;
+                setRecording(false);
+                if (recording) setMsg("Recording cancelled.");
+              }}>Stop camera</button>
             ) : (
               <button className="btn primary" onClick={() => start("user")}>
                 Start camera
@@ -229,10 +259,11 @@ export default function TeachPage() {
         <h2>Known signs</h2>
         {signs.length === 0 && <p className="muted">No custom signs yet.</p>}
         {signs.map((s) => (
-          <div className="setting-row" key={s.text}>
+          <div className="setting-row" key={`${s.text}-${s.builtin}`}>
             <div>
               <strong>{s.text}</strong>{" "}
               <span className="tag">{s.kind}</span>
+              {s.needsRecording && <span className="tag warn">Re-record for live matching</span>}
               {s.builtin && <span className="tag warn">approximate built-in</span>}
             </div>
             {!s.builtin && (
@@ -249,9 +280,8 @@ export default function TeachPage() {
           </div>
         ))}
         <p className="small muted">
-          Built-in signs (I LOVE YOU, YES, NO) are geometric approximations, not
-          trained data — if one misfires, teach your own version and it will
-          usually win.
+          I LOVE YOU includes a built-in handshape. YES and NO need motion, so
+          teach your own recording to match them in Live.
         </p>
       </div>
 

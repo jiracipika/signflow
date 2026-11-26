@@ -28,22 +28,30 @@ function lerpPose(a: Pose[], b: Pose[], t: number): Pose[] {
   }));
 }
 
+function poseBounds(frames: Pose[][]) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const frame of frames) {
+    for (const p of frame) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 function drawHand(
   ctx: CanvasRenderingContext2D,
   pose: Pose[],
   w: number,
   h: number,
-  opts: { mirrored: boolean; trail?: { x: number; y: number }[] }
+  opts: { mirrored: boolean; bounds?: ReturnType<typeof poseBounds> }
 ) {
   // poses are 21 landmarks; bail on partial/empty data (e.g. before the pose
   // file loads) rather than crashing the rAF loop on undefined landmarks
   if (pose.length < 21) return;
-  // fit: poses are wrist-origin, palm-size-1
-  let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-  for (const p of pose) {
-    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-  }
+  const { minX, minY, maxX, maxY } = opts.bounds ?? poseBounds([pose]);
   const span = Math.max(maxX - minX, maxY - minY, 0.8);
   const scale = (Math.min(w, h) * 0.62) / span;
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
@@ -53,21 +61,6 @@ function drawHand(
     if (opts.mirrored) x = w - x;
     return [x, y, scale] as const;
   };
-
-  // motion trail (for J/Z)
-  if (opts.trail && opts.trail.length > 1) {
-    ctx.strokeStyle = "rgba(79,156,255,0.35)";
-    ctx.lineWidth = 6;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    opts.trail.forEach((t, i) => {
-      const x = opts.mirrored ? w - t.x * w : t.x * w;
-      const y = t.y * h;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-  }
 
   const P = pose.map(px);
 
@@ -146,7 +139,7 @@ export default function SignAvatar({
   const targetRef = useRef<Pose[] | null>(null);
   const motionRef = useRef<Pose[][] | null>(null);
   const motionIdxRef = useRef(0);
-  const trailRef = useRef<{ x: number; y: number }[]>([]);
+  const boundsRef = useRef<ReturnType<typeof poseBounds> | undefined>(undefined);
   const rafRef = useRef(0);
   const pausedRef = useRef(paused);
   const onFrameIdxRef = useRef(onFrameIndex);
@@ -160,7 +153,7 @@ export default function SignAvatar({
   useEffect(() => {
     motionRef.current = motion ?? null;
     motionIdxRef.current = 0;
-    trailRef.current = [];
+    boundsRef.current = motion?.length ? poseBounds(motion) : undefined;
   }, [motion]);
 
   useEffect(() => {
@@ -189,13 +182,8 @@ export default function SignAvatar({
         if (onFrameIdxRef.current) onFrameIdxRef.current(i);
         const cur = poseRef.current;
         poseRef.current = cur && cur.length === 21 ? lerpPose(cur, m[i], 0.5) : m[i];
-        // trail from index fingertip (normalized coords for trail drawing)
-        const tip = poseRef.current[8];
-        trailRef.current.push({ x: tip.x, y: tip.y });
-        if (trailRef.current.length > 28) trailRef.current.shift();
-        drawHand(ctx, poseRef.current, w, h, { mirrored, trail: trailRef.current });
+        drawHand(ctx, poseRef.current, w, h, { mirrored, bounds: boundsRef.current });
       } else {
-        trailRef.current = [];
         const target = targetRef.current;
         const cur = poseRef.current;
         if (target && (!cur || cur.length !== 21)) poseRef.current = target;

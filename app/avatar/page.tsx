@@ -14,7 +14,7 @@ import {
   sequenceComplete,
   type SignSequence,
 } from "@/lib/signs/avatar-engine";
-import { loadSigns } from "@/lib/signs/custom-signs";
+import { recordedMotions } from "@/lib/signs/custom-signs";
 
 type PosesFile = { poses: Record<string, { lm: number[]; spread: number; samples: number }> };
 
@@ -63,23 +63,9 @@ export default function AvatarPage() {
   }, []);
 
   // motion data for taught signs (label -> frames) loaded lazily
-  const [motionSigns, setMotionSigns] = useState<Record<string, Pose[][]>>({});
+  const [motionSigns, setMotionSigns] = useState<Record<string, Pose[][]> | null>(null);
   useEffect(() => {
-    const id = setTimeout(() => {
-      const out: Record<string, Pose[][]> = {};
-      for (const s of loadSigns()) {
-        if (s.kind !== "dynamic") continue;
-        const proto = s.prototypes[0];
-        out[s.label.toUpperCase()] = proto.map((f) =>
-          Array.from({ length: 21 }, (_, i) => ({
-            x: f[i * 3] ?? 0,
-            y: f[i * 3 + 1] ?? 0,
-            z: f[i * 3 + 2] ?? 0,
-          }))
-        );
-      }
-      setMotionSigns(out);
-    }, 0);
+    const id = setTimeout(() => setMotionSigns(recordedMotions()), 0);
     return () => clearTimeout(id);
   }, []);
 
@@ -106,19 +92,17 @@ export default function AvatarPage() {
   }, [frameIdx, playing, seq]);
 
   const play = useCallback((input?: string) => {
-    const clean = (input ?? text).toUpperCase().replace(/[^A-Z ]/g, "").trim();
-    if (!clean || !poses) return;
+    const raw = (input ?? text).trim().toUpperCase();
+    const clean = raw.replace(/[^A-Z ]/g, "").trim();
+    const frames = motionSigns?.[raw];
+    if ((!clean && !frames) || !poses) return;
     const spd = speed;
-    const motionKey = Object.keys(motionSigns).find(
-      (k) => clean === k || clean.startsWith(k + " ")
-    );
     setPaused(false);
     setFrameIdx(0);
-    if (motionKey) {
-      const frames = motionSigns[motionKey];
-      setCaption(motionKey);
+    if (frames) {
+      setCaption(raw);
       setPlaying("motion");
-      setSeq({ frames, caption: motionKey, spans: [], words: [] });
+      setSeq({ frames, caption: raw, spans: [], words: [] });
     } else {
       const s = spellSequence(clean, poses, { holdMs: 700 / spd, gapMs: 620 / spd });
       setCaption(s.caption);
@@ -130,18 +114,18 @@ export default function AvatarPage() {
   // ?text= deep link autoplays once poses are ready
   const autoplayRef = useRef(false);
   useEffect(() => {
-    if (!poses || autoplayRef.current) return;
+    if (!poses || !motionSigns || autoplayRef.current) return;
     const q = new URLSearchParams(window.location.search).get("text");
     if (q) {
-      autoplayRef.current = true;
       // defer state updates out of the effect (react-hooks/set-state-in-effect)
       const id = setTimeout(() => {
+        autoplayRef.current = true;
         setText(q);
         play(q);
       }, 0);
       return () => clearTimeout(id);
     }
-  }, [poses, play]);
+  }, [poses, play, motionSigns]);
 
   const stop = () => {
     setPlaying("idle");
@@ -193,7 +177,7 @@ export default function AvatarPage() {
             </button>
           ))}
         </div>
-        {Object.keys(motionSigns).length > 0 && (
+        {motionSigns && Object.keys(motionSigns).length > 0 && (
           <p className="small muted" style={{ marginBottom: 0, marginTop: 10 }}>
             Taught motion signs take precedence: {Object.keys(motionSigns).join(", ")}
           </p>

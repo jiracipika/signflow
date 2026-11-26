@@ -39,3 +39,23 @@ export function resampleSequence(seq: Float64Array[], n = 32): Float64Array[] {
   }
   return out;
 }
+
+export function isValidHand(lm: Landmark[]): boolean {
+  return lm.length === 21 &&
+    lm.every(({ x, y, z }) => [x, y, z].every(Number.isFinite)) &&
+    Math.hypot(lm[9].x - lm[0].x, lm[9].y - lm[0].y, lm[9].z - lm[0].z) > 1e-6;
+}
+
+/** Store wrist travel in the three otherwise-zero wrist coordinates. */
+export function normalizeMotion(frames: Landmark[][]): Float64Array[] {
+  const origin = frames[0][0];
+  const palm = frames[0][9];
+  const scale = Math.hypot(palm.x - origin.x, palm.y - origin.y, palm.z - origin.z);
+  return frames.map((lm) => {
+    const pose = normalizeFrame(lm);
+    pose[0] = (lm[0].x - origin.x) / scale;
+    pose[1] = (lm[0].y - origin.y) / scale;
+    pose[2] = (lm[0].z - origin.z) / scale;
+    return pose;
+  });
+}

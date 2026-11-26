@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeFrame, resampleSequence } from "../lib/signs/normalize.ts";
 import { dtwDistance } from "../lib/signs/dtw.ts";
+import { matchDynamic, matchStatic, recordedMotions, teachDynamicSign, teachStaticSign } from "../lib/signs/custom-signs.ts";
+import { backupToJson, importBackup, parseBackup } from "../lib/signs/backup.ts";
 
 const lm = (arr: [number, number, number][]) =>
   arr.map(([x, y, z]) => ({ x, y, z }));
@@ -72,4 +74,38 @@ test("dtw: time-warped similar sequences stay close", () => {
 
 test("dtw rejects empty", () => {
   assert.equal(dtwDistance([], [Float64Array.from([1])]), Infinity);
+});
+
+test("motion templates distinguish opposite wrist paths and survive backup", () => {
+  const storage = new Map<string, string>();
+  const original = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    } },
+  });
+  try {
+    const frames = (dx: number) => Array.from({ length: 8 }, (_, t) =>
+      lm(openHand.map(([x, y, z]) => [x + dx * t, y, z]))
+    );
+    assert.ok(teachDynamicSign("RIGHT", [{ frames: frames(0.025) }]));
+    assert.ok(teachDynamicSign("LEFT", [{ frames: frames(-0.025) }]));
+    assert.equal(matchDynamic(frames(0.025))?.label, "RIGHT");
+    assert.equal(matchDynamic(frames(-0.025))?.label, "LEFT");
+    assert.equal(matchDynamic(frames(0)), null);
+    const backup = parseBackup(backupToJson());
+    assert.ok(backup.ok);
+    storage.clear();
+    importBackup(backup.backup);
+    assert.equal(matchDynamic(frames(-0.025))?.label, "LEFT");
+    assert.ok(recordedMotions().LEFT.at(-1)![8].x < recordedMotions().LEFT[0][8].x);
+    assert.ok(teachStaticSign("ONE", [{ frames: frames(0) }]));
+    assert.ok(teachStaticSign("TWO", [{ frames: frames(0) }]));
+    assert.equal(matchStatic(frames(0)[0]), null);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "window", original);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
 });
