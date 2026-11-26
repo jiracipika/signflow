@@ -1,312 +1,101 @@
 "use client";
 
-// Avatar page: a proper sign player on a stage. Type anything (or tap a
-// phrase chip) and the avatar signs it; pause/resume, replay, stop, loop,
-// speed, a progress bar, and a mono caption strip with per-letter replay
-// synced to the engine's frame spans. Taught dynamic signs (Teach page)
-// still take precedence.
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import SignAvatar from "@/components/SignAvatar";
-import type { Pose } from "@/components/SignAvatar";
-import {
-  spellSequence,
-  sequenceComplete,
-  type SignSequence,
-} from "@/lib/signs/avatar-engine";
+import { useCallback, useEffect, useState } from "react";
+import Handshape, { ASL_ALPHABET } from "@/components/Handshape";
+import FingerspellingPlayer from "@/components/FingerspellingPlayer";
+import SignAvatar, { type Pose } from "@/components/SignAvatar";
 import { recordedMotions } from "@/lib/signs/custom-signs";
 
-type PosesFile = { poses: Record<string, { lm: number[]; spread: number; samples: number }> };
-
-const PHRASES = [
-  "HELLO", "THANK YOU", "PLEASE", "SORRY", "YES", "NO",
-  "I LOVE YOU", "GOOD MORNING", "GOODNIGHT",
-];
-
 export default function AvatarPage() {
-  const [poses, setPoses] = useState<Record<string, Pose[]> | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
-  const [playing, setPlaying] = useState<"idle" | "letters" | "motion">("idle");
+  const [selected, setSelected] = useState("A");
+  const [playback, setPlayback] = useState<{ text: string; frames?: Pose[][]; run: number } | null>(null);
+  const [finished, setFinished] = useState(false);
   const [paused, setPaused] = useState(false);
   const [loop, setLoop] = useState(false);
-  const [caption, setCaption] = useState("");
-  const [speed, setSpeed] = useState(1); // 0.5 slow .. 1.5 fast
-  const [frameIdx, setFrameIdx] = useState(0);
-  const [seq, setSeq] = useState<SignSequence | null>(null);
+  const [speed, setSpeed] = useState(1);
 
-  const loopRef = useRef(false);
-  useEffect(() => { loopRef.current = loop; }, [loop]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/models/asl-poses-v1.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`poses fetch ${r.status}`);
-        return r.json() as Promise<PosesFile>;
-      })
-      .then((d) => {
-        if (cancelled) return;
-        const out: Record<string, Pose[]> = {};
-        for (const [k, v] of Object.entries(d.poses)) {
-          const flat = v.lm;
-          out[k] = [];
-          for (let i = 0; i < 21; i++)
-            out[k].push({ x: flat[i * 3], y: flat[i * 3 + 1], z: flat[i * 3 + 2] });
-        }
-        setPoses(out);
-      })
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
-    return () => {
-      cancelled = true;
-    };
+  const play = useCallback((input: string) => {
+    const raw = input.toUpperCase().trim().slice(0, 60);
+    const frames = recordedMotions()[raw];
+    const letters = raw.replace(/[^A-Z ]+/g, "").replace(/ +/g, " ").trim();
+    if (!frames && !letters) return;
+    setPaused(false);
+    setFinished(false);
+    setPlayback((current) => ({ text: frames ? raw : letters, frames, run: (current?.run ?? 0) + 1 }));
   }, []);
 
-  // motion data for taught signs (label -> frames) loaded lazily
-  const [motionSigns, setMotionSigns] = useState<Record<string, Pose[][]> | null>(null);
   useEffect(() => {
-    const id = setTimeout(() => setMotionSigns(recordedMotions()), 0);
-    return () => clearTimeout(id);
-  }, []);
+    const input = new URLSearchParams(window.location.search).get("text");
+    if (!input) return;
+    const timer = setTimeout(() => {
+      setText(input.slice(0, 60));
+      play(input);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [play]);
 
-  const restPose = useMemo(() => {
-    if (!poses) return null;
-    const vals = Object.values(poses);
-    const a = poses["C"] ?? vals[0];
-    const b = poses["E"] ?? a;
-    return a.map((p, i) => ({
-      x: (p.x + b[i].x) / 2,
-      y: (p.y + b[i].y) / 2,
-      z: (p.z + b[i].z) / 2,
-    }));
-  }, [poses]);
-
-  // Playback completion follows the frame index SignAvatar reports instead of
-  // a wall-clock timer: frames advance one per FRAME_MS with speed already
-  // baked into the frame count, pausing freezes the index (so a paused player
-  // never completes), and loop mode wraps instead of finishing.
-  useEffect(() => {
-    if (!seq || playing === "idle") return;
-    if (sequenceComplete(frameIdx, seq.frames.length, loopRef.current))
-      setPlaying("idle");
-  }, [frameIdx, playing, seq]);
-
-  const play = useCallback((input?: string) => {
-    const raw = (input ?? text).trim().toUpperCase();
-    const clean = raw.replace(/[^A-Z ]/g, "").trim();
-    const frames = motionSigns?.[raw];
-    if ((!clean && !frames) || !poses) return;
-    const spd = speed;
-    setPaused(false);
-    setFrameIdx(0);
-    if (frames) {
-      setCaption(raw);
-      setPlaying("motion");
-      setSeq({ frames, caption: raw, spans: [], words: [] });
-    } else {
-      const s = spellSequence(clean, poses, { holdMs: 700 / spd, gapMs: 620 / spd });
-      setCaption(s.caption);
-      setSeq(s);
-      setPlaying("letters");
-    }
-  }, [text, poses, speed, motionSigns]);
-
-  // ?text= deep link autoplays once poses are ready
-  const autoplayRef = useRef(false);
-  useEffect(() => {
-    if (!poses || !motionSigns || autoplayRef.current) return;
-    const q = new URLSearchParams(window.location.search).get("text");
-    if (q) {
-      // defer state updates out of the effect (react-hooks/set-state-in-effect)
-      const id = setTimeout(() => {
-        autoplayRef.current = true;
-        setText(q);
-        play(q);
-      }, 0);
-      return () => clearTimeout(id);
-    }
-  }, [poses, play, motionSigns]);
-
-  const stop = () => {
-    setPlaying("idle");
-    setPaused(false);
-    setFrameIdx(0);
-  };
-
-  const activeSpan = useMemo(() => {
-    if (!seq || playing === "idle" || seq.spans.length === 0) return null;
-    return seq.spans.find((sp) => frameIdx >= sp.start && frameIdx < sp.end) ?? null;
-  }, [seq, frameIdx, playing]);
-
-  const replayLetter = (sp: { start: number; end: number }) => {
-    if (!seq) return;
-    const slice = seq.frames.slice(sp.start, sp.end);
-    setSeq({ ...seq, frames: slice, spans: [], words: [] });
-    setFrameIdx(0);
-    setPlaying("letters");
-    setPaused(false);
-  };
+  const finish = useCallback(() => setFinished(true), []);
+  const recorded = playback?.frames;
+  const finishRecording = useCallback((index: number) => {
+    if (!loop && recorded && index >= recorded.length - 1) finish();
+  }, [finish, loop, recorded]);
 
   return (
     <>
-      <div className="card reveal" style={{ "--i": 0 } as React.CSSProperties}>
-        <h2>Signing avatar</h2>
-        <p>
-          Type anything and the avatar signs it — letters flow into each other the
-          way fingerspelling actually moves, with real J and Z stroke paths.
-        </p>
-        <div className="btn-row" style={{ flexWrap: "nowrap" }}>
-          <input
-            type="text"
-            value={text}
-            maxLength={60}
-            placeholder="Type to sign… e.g. I LOVE YOU"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && play()}
-            style={{ flex: 1, minWidth: 0 }}
-            aria-label="Text to sign"
-          />
-          <button className="btn primary" onClick={() => play()} disabled={!text.trim() || !poses}>
-            Sign it
-          </button>
-        </div>
-        <div className="phrase-row" aria-label="Common phrases">
-          {PHRASES.map((p) => (
-            <button key={p} className="phrase-chip" onClick={() => { setText(p); play(p); }}>
-              {p.toLowerCase()}
-            </button>
-          ))}
-        </div>
-        {motionSigns && Object.keys(motionSigns).length > 0 && (
-          <p className="small muted" style={{ marginBottom: 0, marginTop: 10 }}>
-            Taught motion signs take precedence: {Object.keys(motionSigns).join(", ")}
-          </p>
-        )}
-      </div>
-
+      <section className="card">
+        <h1>ASL fingerspelling</h1>
+        <p>Type a word to watch its letter sequence, or select a letter from the alphabet.</p>
+        <form className="btn-row" onSubmit={(event) => { event.preventDefault(); play(text); }}>
+          <input aria-label="Text to fingerspell" maxLength={60} value={text} onChange={(event) => setText(event.target.value)} />
+          <button className="btn primary" disabled={!text.trim()}>Play word</button>
+        </form>
+      </section>
       <div className="live-layout">
-        <section className="reveal" style={{ "--i": 1 } as React.CSSProperties}>
-          {error ? (
-            <div className="card" role="alert">
-              <strong>Could not load pose data.</strong>
-              <p className="small muted">{error}</p>
-              <button className="btn" onClick={() => location.reload()}>Retry</button>
-            </div>
-          ) : (
+        <section className="card" aria-label="Fingerspelling player">
+          {playback ? (
             <>
-              <div className="stage">
-                <SignAvatar
-                  currentPose={playing === "idle" ? restPose : null}
-                  motion={playing !== "idle" ? seq?.frames ?? null : null}
-                  paused={paused}
-                  onFrameIndex={setFrameIdx}
-                />
-                {playing !== "idle" && caption && (
-                  <div className="stage-caption" aria-live="polite">{caption}</div>
-                )}
-              </div>
-
+              <h2>{playback.text}</h2>
+              {recorded ? (
+                <div className="stage">
+                  <SignAvatar currentPose={null} key={playback.run} motion={recorded} paused={paused || finished} onFrameIndex={finishRecording} />
+                </div>
+              ) : (
+                <FingerspellingPlayer key={playback.run} text={playback.text} paused={paused || finished} loop={loop} speed={speed} onComplete={finish} />
+              )}
               <div className="transport">
-                {playing !== "idle" ? (
-                  <>
-                    <button className="btn" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-                      {paused ? "▶ Resume" : "⏸ Pause"}
-                    </button>
-                    <button className="btn" onClick={() => play()}>↻ Replay</button>
-                    <button className="btn ghost" onClick={stop}>■ Stop</button>
-                  </>
-                ) : (
-                  <button
-                    className="btn primary"
-                    onClick={() => play()}
-                    disabled={!text.trim() || !poses}
-                  >
-                    ▶ Sign it
-                  </button>
-                )}
-                <span className="spacer" />
-                <label className="small" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="checkbox"
-                    checked={loop}
-                    onChange={(e) => setLoop(e.target.checked)}
-                    aria-label="Loop signing"
-                  />
-                  Loop
-                </label>
-                <label className="small" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  Speed
-                  <input
-                    type="range"
-                    min={50}
-                    max={150}
-                    value={Math.round(speed * 100)}
-                    onChange={(e) => setSpeed(Number(e.target.value) / 100)}
-                    aria-label="Signing speed"
-                    style={{ width: 90 }}
-                  />
-                  <span style={{ minWidth: 34, textAlign: "right" }}>{speed.toFixed(1)}×</span>
-                </label>
+                {!finished && <button className="btn" onClick={() => setPaused(!paused)}>{paused ? "Resume" : "Pause"}</button>}
+                <button className="btn" onClick={() => play(playback.text)}>Replay</button>
+                <button className="btn" onClick={() => setPlayback(null)}>Stop</button>
+                <label><input type="checkbox" checked={loop} onChange={(event) => setLoop(event.target.checked)} /> Loop</label>
+                {!recorded && <label>Speed <input aria-label="Playback speed" type="range" min={0.5} max={1.5} step={0.1} value={speed} onChange={(event) => setSpeed(+event.target.value)} /></label>}
               </div>
-
-              {playing !== "idle" && seq && (
-                <div className="card">
-                  <div className="progress" role="progressbar" aria-label="Signing progress">
-                    <div
-                      style={{
-                        width: `${Math.min(100, (frameIdx / Math.max(1, seq.frames.length)) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="letter-strip" aria-label="Fingerspelled letters">
-                    {caption.split("").map((ch, i) =>
-                      ch === " " ? (
-                        <span key={i} className="letter-gap" aria-hidden="true" />
-                      ) : (
-                        <button
-                          key={i}
-                          className="letter-chip"
-                          data-active={!!activeSpan && activeSpan.letter === ch}
-                          onClick={() => {
-                            // replay the i-th non-space letter's span
-                            const seen: string[] = [];
-                            const sp = seq.spans.find((s) => {
-                              if (s.letter === ch && seen.length === i - seen.filter((_, j) => j < i && caption[j] !== " ").length) return true;
-                              return false;
-                            }) ?? seq.spans.filter((s) => s.letter === ch)[
-                              caption.slice(0, i).split("").filter((c) => c !== " ").length
-                            ];
-                            if (sp) replayLetter(sp);
-                          }}
-                          title={`Replay ${ch}`}
-                        >
-                          {ch}
-                        </button>
-                      )
-                    )}
-                  </div>
-                  <p className="small muted" style={{ margin: "4px 0 0" }}>
-                    Tap a letter to replay just that sign.
-                  </p>
+              {!recorded && (
+                <div className="letter-strip" aria-label="Inspect a letter">
+                  {playback.text.split("").map((letter, index) => letter === " " ? null : (
+                    <button key={index} className="letter-chip" onClick={() => { setSelected(letter); setPlayback(null); }}>{letter}</button>
+                  ))}
                 </div>
               )}
             </>
+          ) : (
+            <>
+              <h2>Letter {selected}</h2>
+              <Handshape letter={selected} />
+            </>
           )}
         </section>
-        <section className="card reveal" style={{ "--i": 2 } as React.CSSProperties}>
-          <h2>About this avatar</h2>
-          <p className="small">
-            Each letter&apos;s shape is the <strong>mean of hundreds of real hand
-            landmark recordings</strong> from the CC-BY-4.0 training dataset. Letters
-            within a word flow directly into each other (fingerspelling doesn&apos;t
-            return to rest between letters), and J/Z trace their true stroke paths —
-            pinky hook for J, index zigzag for Z — as approximations, since static
-            averages can&apos;t capture their motion.
-          </p>
-          <p className="small muted">
-            This is a fingerspelling visualization, not a certified ASL teaching
-            tool — hand shapes reflect the dataset&apos;s single contributor.
-          </p>
+        <section className="card">
+          <h2>Alphabet reference</h2>
+          <div className="alphabet-grid">
+            {[...ASL_ALPHABET].map((letter) => (
+              <button key={letter} type="button" aria-label={`Show ${letter}`} aria-pressed={!playback && selected === letter} onClick={() => { setSelected(letter); setPlayback(null); }}>
+                <Handshape letter={letter} reveal={false} />
+                <span>{letter}</span>
+              </button>
+            ))}
+          </div>
+          <p className="small muted">Illustrations from WPClipart, via <a href="https://commons.wikimedia.org/wiki/Category:ASL_letters">Wikimedia Commons</a>. See <a href="https://www.lifeprint.com/asl101/pages-layout/fingerspelling.htm">ASL University</a> for fingerspelling demonstrations.</p>
         </section>
       </div>
     </>
